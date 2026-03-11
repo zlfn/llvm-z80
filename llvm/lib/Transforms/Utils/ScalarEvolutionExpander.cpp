@@ -1866,6 +1866,7 @@ SCEVExpander::replaceCongruentIVs(Loop *L, const DominatorTree *DT,
     if (!OrigPhiRef) {
       OrigPhiRef = Phi;
       if (Phi->getType()->isIntegerTy() && TTI &&
+          Phi->getType() != Phis.back()->getType() &&
           TTI->isTruncateFree(Phi->getType(), Phis.back()->getType())) {
         // Make sure we only rewrite using simple induction variables;
         // otherwise, we can make the trip count of a loop unanalyzable

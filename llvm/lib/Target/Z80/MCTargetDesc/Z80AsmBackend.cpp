@@ -1,0 +1,199 @@
+//===-- Z80AsmBackend.cpp - Z80 Asm Backend  ------------------------------===//
+//
+// Part of LLVM-Z80, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implements the Z80AsmBackend class.
+//
+//===----------------------------------------------------------------------===//
+
+#include "MCTargetDesc/Z80AsmBackend.h"
+#include "MCTargetDesc/Z80ELFObjectWriter.h"
+#include "MCTargetDesc/Z80FixupKinds.h"
+#include "MCTargetDesc/Z80MCTargetDesc.h"
+
+#include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCFixup.h"
+#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCValue.h"
+#include "llvm/Support/ErrorHandling.h"
+
+#include <cstdint>
+#include <memory>
+
+namespace llvm {
+
+MCAsmBackend *createZ80AsmBackend(const Target &T, const MCSubtargetInfo &STI,
+                                  const MCRegisterInfo &MRI,
+                                  const llvm::MCTargetOptions &TO) {
+  return new Z80AsmBackend(STI.getTargetTriple().getOS());
+}
+
+std::unique_ptr<MCObjectTargetWriter>
+Z80AsmBackend::createObjectTargetWriter() const {
+  return createZ80ELFObjectWriter(ELF::ELFOSABI_NONE);
+}
+
+bool Z80AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
+                                         uint64_t Value) const {
+  // Z80 doesn't do instruction relaxation in the same way as the original
+  // architecture
+  return false;
+}
+
+bool Z80AsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &F,
+                                                 const MCFixup &Fixup,
+                                                 const MCValue &Target,
+                                                 uint64_t Value,
+                                                 bool Resolved) const {
+  // Z80 branches are limited to signed 8-bit offset for JR
+  // If we can't resolve the value, we might need to relax
+  if (!Resolved)
+    return true;
+
+  // For PC-relative fixups, check if the offset fits in signed 8 bits
+  if (Fixup.getKind() == (MCFixupKind)Z80::PCRel8) {
+    int64_t SignedValue = static_cast<int64_t>(Value);
+    return SignedValue < -128 || SignedValue > 127;
+  }
+
+  return false;
+}
+
+MCFixupKindInfo Z80AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
+  static const MCFixupKindInfo Infos[] = {
+      // name                offset bits flags
+      {"Imm8", 0, 8, 0},
+      {"Imm16", 0, 16, 0},
+      {"Addr8", 0, 8, 0},
+      {"Addr16", 0, 16, 0},
+      {"Addr16_Low", 0, 8, 0},
+      {"Addr16_High", 0, 8, 0},
+      {"Addr24", 0, 24, 0},
+      {"Addr24_Bank", 0, 8, 0},
+      {"Addr24_Segment", 0, 16, 0},
+      {"Addr24_Segment_Low", 0, 8, 0},
+      {"Addr24_Segment_High", 0, 8, 0},
+      {"Addr13", 0, 13, 0},
+      {"PCRel8", 0, 8, 0},
+      {"PCRel16", 0, 16, 0},
+      {"AddrAsciz", 0, 16, 0},
+      {"Disp8", 0, 8, 0}, // 8-bit signed displacement for indexed addressing
+  };
+
+  if (Kind < FirstTargetFixupKind)
+    return MCAsmBackend::getFixupKindInfo(Kind);
+
+  unsigned Index = Kind - FirstTargetFixupKind;
+  if (Index < Z80::NumTargetFixupKinds)
+    return Infos[Index];
+
+  llvm_unreachable("Invalid fixup kind!");
+}
+
+bool Z80AsmBackend::shouldForceRelocation(const MCFixup &Fixup,
+                                          const MCValue &Target) {
+  // Force relocations for external symbols
+  const MCSymbol *Sym = Target.getAddSym();
+  return Sym && Sym->isUndefined();
+}
+
+void Z80AsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
+                               const MCValue &Target, uint8_t *Data,
+                               uint64_t Value, bool IsResolved) {
+  unsigned Kind = Fixup.getKind();
+  unsigned NumBytes = 0;
+
+  switch (Kind) {
+  default:
+    llvm_unreachable("Unknown fixup kind!");
+  case FK_Data_1:
+  case Z80::Imm8:
+  case Z80::Addr8:
+  case Z80::Addr16_Low:
+  case Z80::Addr16_High:
+  case Z80::Addr24_Bank:
+  case Z80::Addr24_Segment_Low:
+  case Z80::Addr24_Segment_High:
+  case Z80::PCRel8:
+  case Z80::Disp8: // 8-bit signed displacement for indexed addressing
+    NumBytes = 1;
+    break;
+  case FK_Data_2:
+  case Z80::Addr16:
+  case Z80::Addr24_Segment:
+  case Z80::PCRel16:
+  case Z80::AddrAsciz:
+  case Z80::Imm16:
+  case Z80::Addr13:
+    NumBytes = 2;
+    break;
+  case Z80::Addr24:
+    NumBytes = 3;
+    break;
+  case FK_Data_4:
+    NumBytes = 4;
+    break;
+  case FK_Data_8:
+    NumBytes = 8;
+    break;
+  }
+
+  // Write the value in little-endian format
+  // Note: Data already points to the correct location within the fragment
+  // (caller adds Fixup.getOffset() before passing Data to us)
+  for (unsigned i = 0; i < NumBytes; ++i) {
+    Data[i] = static_cast<uint8_t>(Value & 0xFF);
+    Value >>= 8;
+  }
+}
+
+bool Z80AsmBackend::mayNeedRelaxation(unsigned Opcode,
+                                      ArrayRef<MCOperand> Operands,
+                                      const MCSubtargetInfo &STI) const {
+  // Z80 JR instructions might need relaxation to JP
+  // TODO: Implement proper relaxation when needed
+  return false;
+}
+
+void Z80AsmBackend::relaxInstruction(MCInst &Inst,
+                                     const MCSubtargetInfo &STI) const {
+  // TODO: Implement JR -> JP relaxation if needed
+  llvm_unreachable("Z80AsmBackend::relaxInstruction not implemented");
+}
+
+unsigned Z80AsmBackend::relaxInstructionTo(unsigned Opcode,
+                                           const MCSubtargetInfo &STI,
+                                           bool &BankRelax) {
+  // Z80 doesn't have the same relaxation model as the original architecture
+  BankRelax = false;
+  return 0;
+}
+
+void Z80AsmBackend::translateOpcodeToSubtarget(MCInst &Inst,
+                                               const MCSubtargetInfo &STI) {
+  // No subtarget-specific opcode translation needed for Z80
+}
+
+void Z80AsmBackend::relaxForImmediate(MCInst &Inst,
+                                      const MCSubtargetInfo &STI) {
+  // No immediate relaxation needed for Z80
+}
+
+bool Z80AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
+                                 const MCSubtargetInfo *STI) const {
+  // Z80 NOP is 0x00
+  for (uint64_t i = 0; i < Count; ++i)
+    OS << char(0x00);
+  return true;
+}
+
+} // end namespace llvm

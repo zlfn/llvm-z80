@@ -1564,6 +1564,24 @@ unsigned Z80InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   if (Opcode == Z80::ADD_HL_FI || Opcode == Z80::SUB_HL_FI)
     return 10;
 
+  // Inline-runtime pseudos expand to multiple MBBs after BranchRelaxation.
+  // Report exact expanded sizes so BranchRelaxation can make precise decisions.
+  // SM83 expansions are larger due to lacking ADC HL,HL / SBC HL,DE / EX DE,HL
+  // / DJNZ and requiring byte-wise emulation + PUSH/POP AF for counter.
+  {
+    const auto &STI =
+        MI.getParent()->getParent()->getSubtarget<Z80Subtarget>();
+    bool IsSM83 = STI.hasSM83();
+    switch (Opcode) {
+    case Z80::MUL16:  return IsSM83 ? 24 : 20;
+    case Z80::UDIV16: return IsSM83 ? 45 : 32;
+    case Z80::UMOD16: return IsSM83 ? 45 : 31;
+    case Z80::SDIV16: return IsSM83 ? 79 : 66;
+    case Z80::SMOD16: return IsSM83 ? 78 : 64;
+    default: break;
+    }
+  }
+
   // Handle pseudo-instructions that have no encoding
   if (MI.isDebugInstr() || MI.isLabel() || MI.isPseudo())
     return 0;

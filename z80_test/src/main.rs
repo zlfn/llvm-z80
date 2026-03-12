@@ -171,6 +171,7 @@ fn cmd_clang(args: &[String]) -> ExitCode {
         opt_levels,
         fast_math,
         omit_fp,
+        inline_runtime: false,
         pattern,
     };
 

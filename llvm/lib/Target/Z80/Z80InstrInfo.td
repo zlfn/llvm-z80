@@ -770,6 +770,34 @@ def SMOD8 : Z80Pseudo<(outs), (ins)> {
   let Uses = [A, E];
   let Defs = [A, B, C, D, E, FLAGS];
 }
+// 16-bit multiply pseudo (for +inline-i16-runtime mode).
+// Input: HL = multiplicand, DE = multiplier. Output: DE = result.
+// Expanded to 16-iteration shift-add loop in Z80ExpandPseudo.
+def MUL16 : Z80Pseudo<(outs), (ins)> {
+  let Uses = [HL, DE];
+  let Defs = [A, B, C, DE, HL, FLAGS];
+}
+// 16-bit unsigned division pseudo (for +inline-i16-runtime mode).
+// Input: HL = dividend, DE = divisor. Output: DE = quotient.
+def UDIV16 : Z80Pseudo<(outs), (ins)> {
+  let Uses = [HL, DE];
+  let Defs = [A, B, C, DE, HL, FLAGS];
+}
+// 16-bit unsigned modulo pseudo. Output: DE = remainder.
+def UMOD16 : Z80Pseudo<(outs), (ins)> {
+  let Uses = [HL, DE];
+  let Defs = [A, B, C, DE, HL, FLAGS];
+}
+// 16-bit signed division pseudo. Output: DE = quotient.
+def SDIV16 : Z80Pseudo<(outs), (ins)> {
+  let Uses = [HL, DE];
+  let Defs = [A, B, C, DE, HL, FLAGS];
+}
+// 16-bit signed modulo pseudo. Output: DE = remainder.
+def SMOD16 : Z80Pseudo<(outs), (ins)> {
+  let Uses = [HL, DE];
+  let Defs = [A, B, C, DE, HL, FLAGS];
+}
 // 8-bit unsigned saturating add pseudo.
 // ADD A,src; JR NC,.done; LD A,#0xFF; .done:
 def UADDSAT8 : Z80Pseudo<(outs), (ins GR8:$src)> {

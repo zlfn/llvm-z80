@@ -49,6 +49,7 @@ public:
 
 private:
   bool selectRuntimeLibCall16(MachineInstr &MI, const char *FuncName);
+  bool selectInline16(MachineInstr &MI, unsigned PseudoOpc);
   bool selectMul8(MachineInstr &MI);
   bool selectMulByConst(MachineInstr &MI);
   bool selectUDivMod8(MachineInstr &MI, bool IsDiv);
@@ -198,6 +199,39 @@ bool Z80InstructionSelector::selectRuntimeLibCall16(MachineInstr &MI,
     BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(TargetOpcode::COPY), DstReg)
         .addReg(Z80::DE);
   }
+
+  MI.eraseFromParent();
+  return true;
+}
+
+// Select 16-bit ops via inline pseudo (for +inline-i16-runtime mode).
+// Input: HL = src1, DE = src2. Output: DE = result.
+// The pseudo is expanded in Z80ExpandPseudo.
+bool Z80InstructionSelector::selectInline16(MachineInstr &MI,
+                                            unsigned PseudoOpc) {
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineFunction &MF = *MBB.getParent();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Register DstReg = MI.getOperand(0).getReg();
+  Register Src1Reg = MI.getOperand(1).getReg();
+  Register Src2Reg = MI.getOperand(2).getReg();
+
+  if (MRI.getType(DstReg).getSizeInBits() != 16)
+    return false;
+
+  if (!RBI.constrainGenericRegister(DstReg, Z80::GR16RegClass, MRI) ||
+      !RBI.constrainGenericRegister(Src1Reg, Z80::GR16RegClass, MRI) ||
+      !RBI.constrainGenericRegister(Src2Reg, Z80::GR16RegClass, MRI))
+    return false;
+
+  const DebugLoc &DL = MI.getDebugLoc();
+
+  // All inline 16-bit pseudos use HL=src1, DE=src2, result in DE.
+  BuildMI(MBB, MI, DL, TII.get(TargetOpcode::COPY), Z80::HL).addReg(Src1Reg);
+  BuildMI(MBB, MI, DL, TII.get(TargetOpcode::COPY), Z80::DE).addReg(Src2Reg);
+  BuildMI(MBB, MI, DL, TII.get(PseudoOpc));
+  BuildMI(MBB, MI, DL, TII.get(TargetOpcode::COPY), DstReg).addReg(Z80::DE);
 
   MI.eraseFromParent();
   return true;
@@ -3998,6 +4032,8 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
       return true;
     if (selectMul8(MI))
       return true;
+    if (STI.inlineI16Runtime())
+      return selectInline16(MI, Z80::MUL16);
     return selectRuntimeLibCall16(MI, "__mulhi3");
 
   case TargetOpcode::G_UMULH:
@@ -4008,11 +4044,15 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
       return true;
     if (tryNarrowSDivMod16(MI, /*IsDiv=*/true))
       return true;
+    if (STI.inlineI16Runtime())
+      return selectInline16(MI, Z80::SDIV16);
     return selectRuntimeLibCall16(MI, "__divhi3");
 
   case TargetOpcode::G_UDIV:
     if (selectUDivMod8(MI, /*IsDiv=*/true))
       return true;
+    if (STI.inlineI16Runtime())
+      return selectInline16(MI, Z80::UDIV16);
     return selectRuntimeLibCall16(MI, "__udivhi3");
 
   case TargetOpcode::G_SREM:
@@ -4020,11 +4060,15 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
       return true;
     if (tryNarrowSDivMod16(MI, /*IsDiv=*/false))
       return true;
+    if (STI.inlineI16Runtime())
+      return selectInline16(MI, Z80::SMOD16);
     return selectRuntimeLibCall16(MI, "__modhi3");
 
   case TargetOpcode::G_UREM:
     if (selectUDivMod8(MI, /*IsDiv=*/false))
       return true;
+    if (STI.inlineI16Runtime())
+      return selectInline16(MI, Z80::UMOD16);
     return selectRuntimeLibCall16(MI, "__umodhi3");
 
   case TargetOpcode::G_UADDSAT:

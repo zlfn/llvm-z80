@@ -264,6 +264,8 @@ fn build_suites(mode: &Mode) -> Vec<SuiteDef> {
             add_clang(&mut suites, "clang Z80 -omit-fp", Target::Z80, vec![OptLevel::O1], false, true);
             add_clang_filtered(&mut suites, "clang Z80 -ffast-math", Target::Z80, vec![OptLevel::O1], true, false, Some("f32".into()));
             add_clang_filtered(&mut suites, "clang SM83 -ffast-math", Target::SM83, vec![OptLevel::O1], true, false, Some("f32".into()));
+            add_clang_inline_rt(&mut suites, "clang Z80 -inline-i16-rt", Target::Z80, vec![OptLevel::O1]);
+            add_clang_inline_rt(&mut suites, "clang SM83 -inline-i16-rt", Target::SM83, vec![OptLevel::O1]);
         }
     }
 
@@ -323,7 +325,7 @@ fn add_clang_filtered(
     suites.push(SuiteDef {
         label: label.clone(),
         runner: Box::new(move |paths, state, idx| {
-            let config = ClangConfig { target, opt_levels: opts, fast_math, omit_fp, pattern };
+            let config = ClangConfig { target, opt_levels: opts, fast_math, omit_fp, inline_runtime: false, pattern };
             // Pre-count tests for progress display
             let test_dir = paths.clang_test_dir();
             let tests = crate::suite::discover_tests(&test_dir, "test_", "c");
@@ -333,6 +335,32 @@ fn add_clang_filtered(
                     config.pattern.as_ref().map_or(true, |p| name.contains(p.as_str()))
                 })
                 .count() as u32 * config.opt_levels.len() as u32;
+            state.lock().unwrap()[idx].total = count;
+
+            let mut cb = progress_callback(state.clone(), idx);
+            let result = clang::run(paths, &config, &mut cb);
+            state.lock().unwrap()[idx].result = Some(result);
+        }),
+    });
+}
+
+fn add_clang_inline_rt(
+    suites: &mut Vec<SuiteDef>,
+    label: &str,
+    target: Target,
+    opts: Vec<OptLevel>,
+) {
+    let label = label.to_string();
+    suites.push(SuiteDef {
+        label: label.clone(),
+        runner: Box::new(move |paths, state, idx| {
+            let config = ClangConfig {
+                target, opt_levels: opts, fast_math: false, omit_fp: false,
+                inline_runtime: true, pattern: None,
+            };
+            let test_dir = paths.clang_test_dir();
+            let tests = crate::suite::discover_tests(&test_dir, "test_", "c");
+            let count = tests.len() as u32 * config.opt_levels.len() as u32;
             state.lock().unwrap()[idx].total = count;
 
             let mut cb = progress_callback(state.clone(), idx);

@@ -12,6 +12,7 @@ pub struct ClangConfig {
     pub opt_levels: Vec<OptLevel>,
     pub fast_math: bool,
     pub omit_fp: bool,
+    pub inline_runtime: bool,
     pub pattern: Option<String>,
 }
 
@@ -23,6 +24,12 @@ impl ClangConfig {
         }
         if self.omit_fp {
             flags.push("-fomit-frame-pointer");
+        }
+        if self.inline_runtime {
+            flags.push("-Xclang");
+            flags.push("-target-feature");
+            flags.push("-Xclang");
+            flags.push("+inline-i16-runtime");
         }
         flags
     }
@@ -38,6 +45,9 @@ impl ClangConfig {
         }
         if self.omit_fp {
             s.push_str("_nofp");
+        }
+        if self.inline_runtime {
+            s.push_str("_inlrt");
         }
         s
     }

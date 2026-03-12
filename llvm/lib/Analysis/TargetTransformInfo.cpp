@@ -250,6 +250,7 @@ int TargetTransformInfo::getInlinerVectorBonusPercent() const {
   return TTIImpl->getInlinerVectorBonusPercent();
 }
 
+
 InstructionCost TargetTransformInfo::getGEPCost(
     Type *PointeeType, const Value *Ptr, ArrayRef<const Value *> Operands,
     Type *AccessType, TTI::TargetCostKind CostKind) const {
@@ -594,6 +595,14 @@ bool TargetTransformInfo::LSRWithInstrQueries() const {
 
 bool TargetTransformInfo::isTruncateFree(Type *Ty1, Type *Ty2) const {
   return TTIImpl->isTruncateFree(Ty1, Ty2);
+}
+
+bool TargetTransformInfo::isZExtFree(Type *Ty1, Type *Ty2) const {
+  return TTIImpl->isZExtFree(Ty1, Ty2);
+}
+
+bool TargetTransformInfo::preferNarrowTypes() const {
+  return TTIImpl->preferNarrowTypes();
 }
 
 bool TargetTransformInfo::isProfitableToHoist(Instruction *I) const {
@@ -1468,6 +1477,8 @@ TargetTransformInfo::VPLegalization
 TargetTransformInfo::getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
   return TTIImpl->getVPLegalizationStrategy(VPI);
 }
+
+
 
 bool TargetTransformInfo::hasArmWideBranch(bool Thumb) const {
   return TTIImpl->hasArmWideBranch(Thumb);

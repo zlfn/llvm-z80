@@ -321,6 +321,7 @@ const char *const RAGreedy::StageName[] = {
     "RS_Assign",
     "RS_Split",
     "RS_Split2",
+    "RS_LightSpill",
     "RS_Spill",
     "RS_Done"
 };
@@ -1172,7 +1173,7 @@ void RAGreedy::splitAroundRegion(LiveRangeEdit &LREdit,
     // Remainder interval. Don't try splitting again, spill if it doesn't
     // allocate.
     if (IntvMap[I] == 0) {
-      ExtraInfo->setStage(Reg, RS_Spill);
+      ExtraInfo->setStage(Reg, RS_LightSpill);
       continue;
     }
 
@@ -1489,7 +1490,7 @@ MCRegister RAGreedy::tryBlockSplit(const LiveInterval &VirtReg,
   for (unsigned I = 0, E = LREdit.size(); I != E; ++I) {
     const LiveInterval &LI = LIS->getInterval(LREdit.get(I));
     if (ExtraInfo->getOrInitStage(LI.reg()) == RS_New && IntvMap[I] == 0)
-      ExtraInfo->setStage(LI, RS_Spill);
+      ExtraInfo->setStage(LI, RS_LightSpill);
   }
 
   if (VerifyEnabled)
@@ -1584,7 +1585,8 @@ static bool readsLaneSubset(const MachineRegisterInfo &MRI,
 /// This is similar to spilling to a larger register class.
 MCRegister RAGreedy::tryInstructionSplit(const LiveInterval &VirtReg,
                                          AllocationOrder &Order,
-                                         SmallVectorImpl<Register> &NewVRegs) {
+                                         SmallVectorImpl<Register> &NewVRegs,
+                                         bool LightSpill) {
   const TargetRegisterClass *CurRC = MRI->getRegClass(VirtReg.reg());
   // There is no point to this if there are no larger sub-classes.
 
@@ -1982,7 +1984,14 @@ MCRegister RAGreedy::trySplit(const LiveInterval &VirtReg,
     MCRegister PhysReg = tryLocalSplit(VirtReg, Order, NewVRegs);
     if (PhysReg || !NewVRegs.empty())
       return PhysReg;
-    return tryInstructionSplit(VirtReg, Order, NewVRegs);
+    return tryInstructionSplit(VirtReg, Order, NewVRegs, false);
+  }
+
+  if (ExtraInfo->getStage(VirtReg) == RS_LightSpill) {
+    NamedRegionTimer T("light_spill", "Light Spilling", TimerGroupName,
+                       TimerGroupDescription, TimePassesIsEnabled);
+    SA->analyze(&VirtReg);
+    return tryInstructionSplit(VirtReg, Order, NewVRegs, true);
   }
 
   NamedRegionTimer T("global_split", "Global Splitting", TimerGroupName,
@@ -2378,18 +2387,6 @@ BlockFrequency RAGreedy::calcSpillCost(const LiveInterval &LI) {
 MCRegister RAGreedy::tryAssignCSRFirstTime(
     const LiveInterval &VirtReg, AllocationOrder &Order, MCRegister PhysReg,
     uint8_t &CostPerUseLimit, SmallVectorImpl<Register> &NewVRegs) {
-  if (ExtraInfo->getStage(VirtReg) == RS_Spill && VirtReg.isSpillable()) {
-    // We choose spill over using the CSR for the first time if the spill cost
-    // is lower than CSRCost.
-    SA->analyze(&VirtReg);
-    if (calcSpillCost(VirtReg) >= CSRCost)
-      return PhysReg;
-
-    // We are going to spill, set CostPerUseLimit to 1 to make sure that
-    // we will not use a callee-saved register in tryEvict.
-    CostPerUseLimit = 1;
-    return MCRegister();
-  }
   if (ExtraInfo->getStage(VirtReg) < RS_Split) {
     // We choose pre-splitting over using the CSR for the first time if
     // the cost of splitting is lower than CSRCost.
@@ -2398,13 +2395,22 @@ MCRegister RAGreedy::tryAssignCSRFirstTime(
     BlockFrequency BestCost = CSRCost; // Don't modify CSRCost.
     unsigned BestCand = calculateRegionSplitCost(VirtReg, Order, BestCost,
                                                  NumCands, true /*IgnoreCSR*/);
-    if (BestCand == NoCand)
-      // Use the CSR if we can't find a region split below CSRCost.
-      return PhysReg;
-
-    // Perform the actual pre-splitting.
-    doRegionSplit(VirtReg, BestCand, false/*HasCompact*/, NewVRegs);
-    return MCRegister();
+    if (BestCand != NoCand) {
+      // Perform the actual pre-splitting.
+      doRegionSplit(VirtReg, BestCand, false/*HasCompact*/, NewVRegs);
+      return MCRegister();
+    }
+  }
+  if (VirtReg.isSpillable()) {
+    // We choose spill over using the CSR for the first time if the spill cost
+    // is lower than CSRCost.
+    SA->analyze(&VirtReg);
+    if (calcSpillCost(VirtReg) < CSRCost) {
+      // Set CostPerUseLimit to 1 to make sure that
+      // we will not use a callee-saved register in tryEvict.
+      CostPerUseLimit = 1;
+      return MCRegister();
+    }
   }
   return PhysReg;
 }
@@ -2646,6 +2652,7 @@ MCRegister RAGreedy::selectOrSplitImpl(const LiveInterval &VirtReg,
                                        SmallVirtRegSet &FixedRegisters,
                                        RecoloringStack &RecolorStack,
                                        unsigned Depth) {
+
   uint8_t CostPerUseLimit = uint8_t(~0u);
   // First try assigning a free register.
   auto Order =
@@ -2726,6 +2733,8 @@ MCRegister RAGreedy::selectOrSplitImpl(const LiveInterval &VirtReg,
   LiveRangeEdit LRE(&VirtReg, NewVRegs, *MF, *LIS, VRM, this, &DeadRemats);
   spiller().spill(LRE, &Order);
   ExtraInfo->setStage(NewVRegs.begin(), NewVRegs.end(), RS_Done);
+  for (Register VReg : NewVRegs)
+    LIS->getInterval(VReg).markNotSpillable();
 
   // Tell LiveDebugVariables about the new ranges. Ranges not being covered by
   // the new regs are kept in LDV (still mapping to the old register), until

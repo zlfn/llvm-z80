@@ -60,19 +60,26 @@ Z80TargetLowering::Z80TargetLowering(const Z80TargetMachine &TM,
   PredictableSelectIsExpensive = true;
 }
 
-MVT Z80TargetLowering::getRegisterTypeForCallingConv(
-    LLVMContext &Context, CallingConv::ID CC, EVT VT) const {
-  if (VT == MVT::iPTR || VT == MVT::i16)
-    return MVT::i16; // Z80 uses 16-bit pointers
-  return TargetLowering::getRegisterTypeForCallingConv(Context, CC, VT);
+MVT Z80TargetLowering::getRegisterType(MVT VT) const {
+  // Z80 has 8-bit and 16-bit registers
+  if (VT.getSizeInBits() > 16)
+    return MVT::i8; // Split larger values into bytes
+  if (VT.getSizeInBits() > 8)
+    return MVT::i16;
+  return TargetLowering::getRegisterType(VT);
 }
 
-unsigned Z80TargetLowering::getNumRegistersForCallingConv(
-    LLVMContext &Context, CallingConv::ID CC, EVT VT) const {
-  if (VT == MVT::iPTR || VT == MVT::i16)
-    return 1;
-  return TargetLowering::getNumRegistersForCallingConv(Context, CC, VT);
+unsigned
+Z80TargetLowering::getNumRegisters(LLVMContext &Context, EVT VT,
+                                   std::optional<MVT> RegisterVT) const {
+  if (VT.getSizeInBits() > 16)
+    return VT.getSizeInBits() / 8;
+  if (VT.getSizeInBits() > 8)
+    return 1; // One 16-bit register
+  return TargetLowering::getNumRegisters(Context, VT, RegisterVT);
 }
+
+
 
 TargetLowering::ConstraintType
 Z80TargetLowering::getConstraintType(StringRef Constraint) const {

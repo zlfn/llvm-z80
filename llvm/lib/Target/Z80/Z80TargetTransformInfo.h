@@ -68,6 +68,7 @@ public:
                            const Function *Callee) const override {
     return false;
   }
+
 };
 
 } // end namespace llvm

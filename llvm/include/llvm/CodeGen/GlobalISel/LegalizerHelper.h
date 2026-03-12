@@ -17,6 +17,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+
 #ifndef LLVM_CODEGEN_GLOBALISEL_LEGALIZERHELPER_H
 #define LLVM_CODEGEN_GLOBALISEL_LEGALIZERHELPER_H
 
@@ -215,6 +216,9 @@ public:
   LLVM_ABI LegalizeResult
   createMemLibcall(MachineRegisterInfo &MRI, MachineInstr &MI,
                    LostDebugLocObserver &LocObserver) const;
+
+  /// Return the libcall corresponding to a given opcode and size.
+  RTLIB::Libcall getRTLibDesc(unsigned Opcode, unsigned Size) const;
 
 private:
   LegalizeResult

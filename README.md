@@ -1,7 +1,8 @@
 <img width="2560" height="1280" alt="LLVM-Z80" src="https://github.com/user-attachments/assets/0425ae08-9ecb-4270-840d-90145678df09" />
 
 
-LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.
+LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.  
+[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Test Suites]](https://github.com/zlfn/llvm-z80/tree/main/z80_test) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ)
 
 ## Notice
 
@@ -30,7 +31,12 @@ Emulation Tested : Z80, SM83
 * SDCC-compatible sdasz80 assembly output with Clang driver integration (`clang --target=z80`)
 * GlobalISel-based code generation pipeline with register bank selection and instruction selection
 * standard LLVM optimizations including constant folding, dead code elimination, copy propagation, and global register allocation
-  
+
+## Frontend Integration
+* **C/C++** : Supported via Clang included in this repository (C++ is experimental and untested)
+* **Rust** : Ongoing
+* **Others** : Potential support for other LLVM-based languages (Zig, TinyGo, EmbeddedSwift)
+
 # Building LLVM-Z80
 
 ## Prerequisites
@@ -91,8 +97,9 @@ Runtime libraries are built at `build/lib/z80/z80_rt.lib` and `build/lib/sm83/sm
 
 ### Related Works
 LLVM-Z80 stands on the shoulders of the following projects.
-* [LLVM](https://llvm.org/) : The LLVM Compiler Infrastructure
-* [LLVM-MOS](https://llvm-mos.org/) : Another attempt to create an LLVM backend for a classic CPU, and the upstream for this project.
+* [LLVM](https://llvm.org/) : The LLVM Compiler Infrastructure, upstream of this project.
+* [LLVM-MOS](https://llvm-mos.org/) : Another attempt to create an LLVM backend for a classic CPU, LLVM-Z80 has adopted many optimization passes from LLVM-MOS.
+* [ajokela/LLVM-Z80](https://github.com/ajokela/llvm-z80) : Experimental GlobalISel based Z80 backend, this backend was developed based on this fork.
 * [LLVM-eZ80](https://github.com/jacobly0/llvm-project) / [ez80-clang](https://github.com/dinoboards/ez80-clang) : The most mature LLVM backend for the eZ80.
 * [gb-llvm](https://github.com/DaveDuck321/gb-llvm) : An LLVM backend for the Nintendo Game Boy (SM83), including actual game ROM examples.
 * [Rust-GB](https://github.com/zlfn/rust-gb) : Compiling Rust for the Game Boy, The reason this project was born.

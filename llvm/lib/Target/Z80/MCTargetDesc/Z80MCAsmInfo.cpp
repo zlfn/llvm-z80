@@ -109,7 +109,6 @@ Z80MCAsmInfoSDCC::Z80MCAsmInfoSDCC(const Triple &TT,
 
   // Labels
   GlobalDirective = "\t.globl\t";
-  PrivateGlobalPrefix = ".L";
   PrivateLabelPrefix = ".L";
 
   initializeAtSpecifiers(AtSpecifiers);

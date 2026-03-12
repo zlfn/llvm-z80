@@ -42,13 +42,6 @@ Z80AsmBackend::createObjectTargetWriter() const {
   return createZ80ELFObjectWriter(ELF::ELFOSABI_NONE);
 }
 
-bool Z80AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
-                                         uint64_t Value) const {
-  // Z80 doesn't do instruction relaxation in the same way as the original
-  // architecture
-  return false;
-}
-
 bool Z80AsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &F,
                                                  const MCFixup &Fixup,
                                                  const MCValue &Target,

@@ -3275,6 +3275,13 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
     return true;
   }
 
+  case TargetOpcode::G_TRAP: {
+    // Lower trap to HALT instruction
+    BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(Z80::HALT));
+    MI.eraseFromParent();
+    return true;
+  }
+
   case TargetOpcode::G_BRINDIRECT: {
     // Indirect branch: JP (HL)
     Register TargetReg = MI.getOperand(0).getReg();

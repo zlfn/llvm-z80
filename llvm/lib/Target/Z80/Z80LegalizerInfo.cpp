@@ -278,6 +278,8 @@ Z80LegalizerInfo::Z80LegalizerInfo(const Z80Subtarget &STI) {
   getActionDefinitionsBuilder(G_BRJT).customFor({{P0, S16}});
   getActionDefinitionsBuilder(G_BRINDIRECT).legalFor({P0});
   getActionDefinitionsBuilder(G_JUMP_TABLE).legalFor({P0});
+  getActionDefinitionsBuilder(G_TRAP).legalIf(
+      [](const LegalityQuery &) { return true; });
 
   // PHI nodes
   getActionDefinitionsBuilder(G_PHI)

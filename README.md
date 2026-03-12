@@ -2,7 +2,7 @@
 
 
 LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.  
-[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Test Suites]](https://github.com/zlfn/llvm-z80/tree/main/z80_test) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ)
+[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Test Suites]](https://github.com/zlfn/llvm-z80/tree/main/z80_test) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ) | [[Prebuilt Binaries]](https://github.com/zlfn/llvm-z80/releases) | [[AUTHORS]](https://github.com/zlfn/llvm-z80/blob/main/AUTHORS) | [[NOTICE]](https://github.com/zlfn/llvm-z80/blob/main/NOTICE)
 
 ## Notice
 

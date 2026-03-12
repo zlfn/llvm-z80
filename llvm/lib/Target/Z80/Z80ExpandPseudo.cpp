@@ -387,24 +387,31 @@ bool Z80ExpandPseudo::expandSDivMod8(MachineBasicBlock &MBB, MachineInstr &MI,
   //   HeadMBB:
   //     SDIV: xor e; ld c, a; xor e  (C = dvd XOR dsr, A = dvd restored)
   //     SMOD: ld c, a                 (C = original dividend)
-  //     or a
-  //     jp p, DvdPosMBB
-  //     neg
+  //     or a / bit 7, a
+  //     jp p / jr z, DvdPosMBB
+  //   NegDvdMBB:
+  //     neg / cpl + inc a
   //   DvdPosMBB:
   //     ld d, a          ; D = |dividend|
   //     bit 7, e
   //     jr z, DsrPosMBB
+  //   NegDsrMBB:
   //     xor a; sub e; ld e, a  ; E = |divisor|
   //   DsrPosMBB:
   //     xor a            ; A = 0 (remainder)
   //     ld b, #8         ; loop counter
   //   LoopMBB:
-  //     sla d; rla; cp e; jr c, SkipMBB; sub e; inc d
+  //     sla d; rla; cp e
+  //     jr c, SkipMBB
+  //   SubIncMBB:
+  //     sub e; inc d
   //   SkipMBB:
   //     djnz LoopMBB
   //   SignMBB:
-  //     SDIV: ld a, d; bit 7, c; jr z, TailMBB; neg
-  //     SMOD: bit 7, c; jr z, TailMBB; neg
+  //     SDIV: ld a, d; bit 7, c; jr z, TailMBB
+  //     SMOD: bit 7, c; jr z, TailMBB
+  //   NegResMBB:
+  //     neg / cpl + inc a
   //   TailMBB:
   //     (result in A)
 
@@ -413,26 +420,34 @@ bool Z80ExpandPseudo::expandSDivMod8(MachineBasicBlock &MBB, MachineInstr &MI,
   DebugLoc DL = MI.getDebugLoc();
   bool IsSM83 = STI.hasSM83();
 
+  MachineBasicBlock *NegDvdMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *DvdPosMBB = MF->CreateMachineBasicBlock();
+  MachineBasicBlock *NegDsrMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *DsrPosMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *LoopMBB = MF->CreateMachineBasicBlock();
+  MachineBasicBlock *SubIncMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *SkipMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *SignMBB = MF->CreateMachineBasicBlock();
+  MachineBasicBlock *NegResMBB = MF->CreateMachineBasicBlock();
   MachineBasicBlock *TailMBB = MF->CreateMachineBasicBlock();
 
   MachineFunction::iterator InsertPos = std::next(MBB.getIterator());
+  MF->insert(InsertPos, NegDvdMBB);
   MF->insert(InsertPos, DvdPosMBB);
+  MF->insert(InsertPos, NegDsrMBB);
   MF->insert(InsertPos, DsrPosMBB);
   MF->insert(InsertPos, LoopMBB);
+  MF->insert(InsertPos, SubIncMBB);
   MF->insert(InsertPos, SkipMBB);
   MF->insert(InsertPos, SignMBB);
+  MF->insert(InsertPos, NegResMBB);
   MF->insert(InsertPos, TailMBB);
 
   TailMBB->splice(TailMBB->begin(), &MBB,
                   std::next(MachineBasicBlock::iterator(MI)), MBB.end());
   TailMBB->transferSuccessorsAndUpdatePHIs(&MBB);
 
-  // HeadMBB: save sign info to C, make dividend positive
+  // HeadMBB: save sign info to C, test dividend sign
   if (IsDiv) {
     // C = dividend XOR divisor (quotient sign in bit 7)
     BuildMI(&MBB, DL, TII.get(Z80::XOR_E));  // A = dividend XOR divisor
@@ -447,41 +462,52 @@ bool Z80ExpandPseudo::expandSDivMod8(MachineBasicBlock &MBB, MachineInstr &MI,
     // SM83: no JP P — use BIT 7,A + JR Z (jump if positive)
     BuildMI(&MBB, DL, TII.get(Z80::BIT_7_A));
     BuildMI(&MBB, DL, TII.get(Z80::JR_Z_e)).addMBB(DvdPosMBB);
-    // SM83: no NEG — use CPL + INC A
-    BuildMI(&MBB, DL, TII.get(Z80::CPL));
-    BuildMI(&MBB, DL, TII.get(Z80::INC_A));
   } else {
     BuildMI(&MBB, DL, TII.get(Z80::OR_A)); // set flags for sign test
     BuildMI(&MBB, DL, TII.get(Z80::JP_P_nn)).addMBB(DvdPosMBB);
-    BuildMI(&MBB, DL, TII.get(Z80::NEG)); // A = -dividend
   }
-  MBB.addSuccessor(DvdPosMBB); // branch taken
-  MBB.addSuccessor(DvdPosMBB); // fall through after negate
+  MBB.addSuccessor(DvdPosMBB); // branch taken (positive)
+  MBB.addSuccessor(NegDvdMBB); // fall through (negative)
 
-  // DvdPosMBB: save |dividend|, make divisor positive
+  // NegDvdMBB: negate dividend
+  if (IsSM83) {
+    BuildMI(NegDvdMBB, DL, TII.get(Z80::CPL));
+    BuildMI(NegDvdMBB, DL, TII.get(Z80::INC_A));
+  } else {
+    BuildMI(NegDvdMBB, DL, TII.get(Z80::NEG));
+  }
+  NegDvdMBB->addSuccessor(DvdPosMBB); // fall through
+
+  // DvdPosMBB: save |dividend|, test divisor sign
   BuildMI(DvdPosMBB, DL, TII.get(Z80::LD_D_A)); // D = |dividend|
   BuildMI(DvdPosMBB, DL, TII.get(Z80::BIT_7_E));
   BuildMI(DvdPosMBB, DL, TII.get(Z80::JR_Z_e)).addMBB(DsrPosMBB);
-  BuildMI(DvdPosMBB, DL, TII.get(Z80::XOR_A));
-  BuildMI(DvdPosMBB, DL, TII.get(Z80::SUB_E));  // A = 0 - divisor = -divisor
-  BuildMI(DvdPosMBB, DL, TII.get(Z80::LD_E_A)); // E = |divisor|
-  DvdPosMBB->addSuccessor(DsrPosMBB);           // jr z taken
-  DvdPosMBB->addSuccessor(DsrPosMBB);           // fall through
+  DvdPosMBB->addSuccessor(DsrPosMBB); // jr z taken (positive)
+  DvdPosMBB->addSuccessor(NegDsrMBB); // fall through (negative)
+
+  // NegDsrMBB: negate divisor
+  BuildMI(NegDsrMBB, DL, TII.get(Z80::XOR_A));
+  BuildMI(NegDsrMBB, DL, TII.get(Z80::SUB_E));  // A = -divisor
+  BuildMI(NegDsrMBB, DL, TII.get(Z80::LD_E_A)); // E = |divisor|
+  NegDsrMBB->addSuccessor(DsrPosMBB); // fall through
 
   // DsrPosMBB: setup for unsigned division loop
   BuildMI(DsrPosMBB, DL, TII.get(Z80::XOR_A));            // A = 0 (remainder)
   BuildMI(DsrPosMBB, DL, TII.get(Z80::LD_B_n)).addImm(8); // B = loop counter
   DsrPosMBB->addSuccessor(LoopMBB);
 
-  // LoopMBB: restoring division step
+  // LoopMBB: restoring division step — shift and compare
   BuildMI(LoopMBB, DL, TII.get(Z80::SLA_D));
   BuildMI(LoopMBB, DL, TII.get(Z80::RLA));
   BuildMI(LoopMBB, DL, TII.get(Z80::CP_E));
   BuildMI(LoopMBB, DL, TII.get(Z80::JR_C_e)).addMBB(SkipMBB);
-  BuildMI(LoopMBB, DL, TII.get(Z80::SUB_E));
-  BuildMI(LoopMBB, DL, TII.get(Z80::INC_D));
-  LoopMBB->addSuccessor(SkipMBB); // jr c taken
-  LoopMBB->addSuccessor(SkipMBB); // fall through
+  LoopMBB->addSuccessor(SkipMBB);    // jr c taken (remainder < divisor)
+  LoopMBB->addSuccessor(SubIncMBB);  // fall through (remainder >= divisor)
+
+  // SubIncMBB: subtract divisor, set quotient bit
+  BuildMI(SubIncMBB, DL, TII.get(Z80::SUB_E));
+  BuildMI(SubIncMBB, DL, TII.get(Z80::INC_D));
+  SubIncMBB->addSuccessor(SkipMBB); // fall through
 
   // SkipMBB: loop control
   if (IsSM83) {
@@ -490,34 +516,28 @@ bool Z80ExpandPseudo::expandSDivMod8(MachineBasicBlock &MBB, MachineInstr &MI,
   } else {
     BuildMI(SkipMBB, DL, TII.get(Z80::DJNZ_e)).addMBB(LoopMBB);
   }
-  SkipMBB->addSuccessor(LoopMBB);
-  SkipMBB->addSuccessor(SignMBB);
+  SkipMBB->addSuccessor(LoopMBB); // loop back
+  SkipMBB->addSuccessor(SignMBB);  // fall through
 
   // SignMBB: apply sign to result
   if (IsDiv) {
     // Quotient sign = XOR of dividend and divisor signs (saved in C bit 7)
     BuildMI(SignMBB, DL, TII.get(Z80::LD_A_D)); // A = unsigned quotient
-    BuildMI(SignMBB, DL, TII.get(Z80::BIT_7_C));
-    BuildMI(SignMBB, DL, TII.get(Z80::JR_Z_e)).addMBB(TailMBB);
-    if (IsSM83) {
-      BuildMI(SignMBB, DL, TII.get(Z80::CPL));
-      BuildMI(SignMBB, DL, TII.get(Z80::INC_A));
-    } else {
-      BuildMI(SignMBB, DL, TII.get(Z80::NEG));
-    }
-  } else {
-    // Remainder sign = dividend sign (saved in C bit 7)
-    BuildMI(SignMBB, DL, TII.get(Z80::BIT_7_C));
-    BuildMI(SignMBB, DL, TII.get(Z80::JR_Z_e)).addMBB(TailMBB);
-    if (IsSM83) {
-      BuildMI(SignMBB, DL, TII.get(Z80::CPL));
-      BuildMI(SignMBB, DL, TII.get(Z80::INC_A));
-    } else {
-      BuildMI(SignMBB, DL, TII.get(Z80::NEG));
-    }
   }
-  SignMBB->addSuccessor(TailMBB); // jr z taken
-  SignMBB->addSuccessor(TailMBB); // fall through after negate
+  // (SMOD: A already has remainder)
+  BuildMI(SignMBB, DL, TII.get(Z80::BIT_7_C));
+  BuildMI(SignMBB, DL, TII.get(Z80::JR_Z_e)).addMBB(TailMBB);
+  SignMBB->addSuccessor(TailMBB);   // jr z taken (positive)
+  SignMBB->addSuccessor(NegResMBB);  // fall through (negative)
+
+  // NegResMBB: negate result
+  if (IsSM83) {
+    BuildMI(NegResMBB, DL, TII.get(Z80::CPL));
+    BuildMI(NegResMBB, DL, TII.get(Z80::INC_A));
+  } else {
+    BuildMI(NegResMBB, DL, TII.get(Z80::NEG));
+  }
+  NegResMBB->addSuccessor(TailMBB); // fall through
 
   MI.eraseFromParent();
   return true;

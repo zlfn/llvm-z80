@@ -84,6 +84,7 @@ DecodeStatus Z80Disassembler::getInstruction(MCInst &Instr, uint64_t &Size,
                                              uint64_t Address,
                                              raw_ostream &CStream) const {
   Size = 0;
+  bool IsSM83 = STI.hasFeature(Z80::FeatureSM83);
 
   // Try decoding with increasing instruction sizes (1 to 4 bytes).
   // Z80 instructions are 1-4 bytes long.
@@ -95,6 +96,33 @@ DecodeStatus Z80Disassembler::getInstruction(MCInst &Instr, uint64_t &Size,
     for (size_t Byte = 0; Byte < InsnSize; ++Byte)
       Insn |= ((uint64_t)Bytes[Byte]) << (8 * Byte);
 
+    // SM83 has its own DecoderNamespace for instructions that reuse Z80
+    // opcode slots (e.g., 0x22/0x2A/0x32/0x3A/0xD9/0xEA/0xFA).
+    // Try the SM83-specific tables first when targeting SM83.
+    if (IsSM83) {
+      const uint8_t *SM83Table = nullptr;
+      switch (InsnSize) {
+      case 1:
+        SM83Table = DecoderTableSM838;
+        break;
+      case 2:
+        SM83Table = DecoderTableSM8316;
+        break;
+      case 3:
+        SM83Table = DecoderTableSM8324;
+        break;
+      }
+      if (SM83Table) {
+        DecodeStatus Result =
+            decodeInstruction(SM83Table, Instr, Insn, Address, this, STI);
+        if (Result != MCDisassembler::Fail) {
+          Size = InsnSize;
+          return Result;
+        }
+      }
+    }
+
+    // Common + Z80-specific tables (predicate-gated).
     const uint8_t *Table = nullptr;
     switch (InsnSize) {
     case 1:

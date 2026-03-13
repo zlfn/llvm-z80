@@ -22,7 +22,10 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
-/// Z80 Assembler (sdasz80)
+//===----------------------------------------------------------------------===//
+// SDCC Assembler (sdasz80 / sdasgb) — used with -fno-integrated-as
+//===----------------------------------------------------------------------===//
+
 void z80::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                   const InputInfo &Output,
                                   const InputInfoList &Inputs,
@@ -67,11 +70,15 @@ void z80::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
   }
 }
 
-/// Z80 Linker (sdldz80)
-void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
-                               const InputInfo &Output,
-                               const InputInfoList &Inputs, const ArgList &Args,
-                               const char *LinkingOutput) const {
+//===----------------------------------------------------------------------===//
+// SDCC Linker (sdldz80 / sdldgb) — used with -fno-integrated-as
+//===----------------------------------------------------------------------===//
+
+void z80::SDCCLinker::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
   const auto &TC = static_cast<const Z80ToolChain &>(getToolChain());
 
   ArgStringList CmdArgs;
@@ -89,16 +96,11 @@ void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Select target-specific tools and runtime paths.
   bool IsSM83 = TC.getTriple().isSM83();
   const char *SubDir = IsSM83 ? "sm83" : "z80";
-  const char *Crt0Name = IsSM83 ? "sm83_crt0.rel" : "z80_crt0.rel";
   const char *RtLibName = IsSM83 ? "sm83_rt.lib" : "z80_rt.lib";
   const char *RtLibBase = IsSM83 ? "sm83_rt" : "z80_rt";
   const char *LinkerName = IsSM83 ? "sdldgb" : "sdldz80";
 
-  // Link crt0 first so startup code is at address 0x0000.
-  SmallString<256> Crt0Path(TC.getDriver().Dir);
-  llvm::sys::path::append(Crt0Path, "..", "lib", SubDir, Crt0Name);
-  if (llvm::sys::fs::exists(Crt0Path))
-    CmdArgs.push_back(Args.MakeArgString(Crt0Path));
+  // SDCC toolchain: no custom crt0 — SDCC's own startup handles initialization.
 
   // Add input object files.
   for (const auto &II : Inputs) {
@@ -141,7 +143,70 @@ void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 }
 
-/// Z80 ToolChain
+//===----------------------------------------------------------------------===//
+// ELF Linker (ld.lld) — default when using integrated assembler
+//===----------------------------------------------------------------------===//
+
+void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                               const InputInfo &Output,
+                               const InputInfoList &Inputs, const ArgList &Args,
+                               const char *LinkingOutput) const {
+  const auto &TC = static_cast<const Z80ToolChain &>(getToolChain());
+
+  ArgStringList CmdArgs;
+
+  bool IsSM83 = TC.getTriple().isSM83();
+  const char *SubDir = IsSM83 ? "sm83" : "z80";
+
+  // No dynamic linking on Z80
+  CmdArgs.push_back("-static");
+
+  // Use the default linker script (flat memory, .text at 0x0000).
+  const char *LDScriptName = IsSM83 ? "sm83.ld" : "z80.ld";
+  SmallString<256> LDScript(TC.getDriver().Dir);
+  llvm::sys::path::append(LDScript, "..", "lib", SubDir, LDScriptName);
+  if (llvm::sys::fs::exists(LDScript)) {
+    CmdArgs.push_back("-T");
+    CmdArgs.push_back(Args.MakeArgString(LDScript));
+  } else {
+    // Fallback: set entry point manually if no linker script found.
+    CmdArgs.push_back("-e");
+    CmdArgs.push_back("_start");
+  }
+
+  // Output
+  CmdArgs.push_back("-o");
+  CmdArgs.push_back(Output.getFilename());
+
+  // Link crt0 first so startup code is at address 0x0000.
+  SmallString<256> Crt0Path(TC.getDriver().Dir);
+  llvm::sys::path::append(Crt0Path, "..", "lib", SubDir,
+                           IsSM83 ? "sm83_crt0.o" : "z80_crt0.o");
+  if (llvm::sys::fs::exists(Crt0Path))
+    CmdArgs.push_back(Args.MakeArgString(Crt0Path));
+
+  // Add input object files.
+  for (const auto &II : Inputs) {
+    if (II.isFilename())
+      CmdArgs.push_back(II.getFilename());
+  }
+
+  // Auto-link runtime library archive if found.
+  SmallString<256> RtLib(TC.getDriver().Dir);
+  llvm::sys::path::append(RtLib, "..", "lib", SubDir,
+                           IsSM83 ? "sm83_rt.a" : "z80_rt.a");
+  if (llvm::sys::fs::exists(RtLib))
+    CmdArgs.push_back(Args.MakeArgString(RtLib));
+
+  const char *Exec = Args.MakeArgString(TC.GetProgramPath("ld.lld"));
+  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
+                                         Exec, CmdArgs, Inputs, Output));
+}
+
+//===----------------------------------------------------------------------===//
+// Z80 ToolChain
+//===----------------------------------------------------------------------===//
+
 Z80ToolChain::Z80ToolChain(const Driver &D, const llvm::Triple &Triple,
                            const ArgList &Args)
     : ToolChain(D, Triple, Args) {
@@ -153,15 +218,23 @@ Tool *Z80ToolChain::buildAssembler() const {
 }
 
 Tool *Z80ToolChain::buildLinker() const {
+  // Linker selection is based on the target triple, not the assembler choice.
+  // SDCC triples (z80-*-*-sdcc) produce .rel objects for sdldz80/sdldgb;
+  // ELF triples (z80, sm83) produce ELF objects for ld.lld.
+  if (getTriple().getEnvironment() == llvm::Triple::SDCC)
+    return new tools::z80::SDCCLinker(*this);
   return new tools::z80::Linker(*this);
 }
 
 void Z80ToolChain::addClangTargetOptions(const ArgList &DriverArgs,
                                          ArgStringList &CC1Args,
                                          Action::OffloadKind) const {
-  // Use sdasz80 assembly output format.
-  CC1Args.push_back("-mllvm");
-  CC1Args.push_back("-z80-asm-format=sdasz80");
+  // When using the external SDCC assembler, emit sdasz80 assembly format.
+  // With the integrated assembler, assembly goes directly through MC.
+  if (!useIntegratedAs()) {
+    CC1Args.push_back("-mllvm");
+    CC1Args.push_back("-z80-asm-format=sdasz80");
+  }
 
   // Disable features not applicable to Z80 bare metal.
   CC1Args.push_back("-fno-use-cxa-atexit");

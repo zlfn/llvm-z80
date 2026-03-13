@@ -74,7 +74,9 @@ protected:
   Tool *buildLinker() const override;
 
 public:
-  bool IsIntegratedAssemblerDefault() const override { return true; }
+  bool IsIntegratedAssemblerDefault() const override {
+    return getTriple().getEnvironment() != llvm::Triple::SDCC;
+  }
   bool isPICDefault() const override { return false; }
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
     return false;

@@ -130,16 +130,17 @@ function(z80_build_builtins TRIPLE SUBDIR CRT0_ASM RT_DIR SDAS)
   )
   list(APPEND ALL_RUNTIME_OUTPUTS ${OUT}/${SUBDIR}_rt.a)
 
-  set(LDSCRIPT ${Z80_BUILTINS_DIR}/z80/z80.ld)
+  set(LDSCRIPT_NAME ${SUBDIR}.ld)
+  set(LDSCRIPT ${Z80_BUILTINS_DIR}/${SUBDIR}/${LDSCRIPT_NAME})
   add_custom_command(
-    OUTPUT ${OUT}/z80.ld
-    COMMAND ${CMAKE_COMMAND} -E copy ${LDSCRIPT} ${OUT}/z80.ld
+    OUTPUT ${OUT}/${LDSCRIPT_NAME}
+    COMMAND ${CMAKE_COMMAND} -E copy ${LDSCRIPT} ${OUT}/${LDSCRIPT_NAME}
     DEPENDS ${LDSCRIPT}
     COMMENT "Copying ${SUBDIR} linker script"
   )
-  list(APPEND ALL_RUNTIME_OUTPUTS ${OUT}/z80.ld)
+  list(APPEND ALL_RUNTIME_OUTPUTS ${OUT}/${LDSCRIPT_NAME})
 
-  install(FILES ${OUT}/${SUBDIR}_crt0.o ${OUT}/${SUBDIR}_rt.a ${OUT}/z80.ld
+  install(FILES ${OUT}/${SUBDIR}_crt0.o ${OUT}/${SUBDIR}_rt.a ${OUT}/${LDSCRIPT_NAME}
           DESTINATION lib/${SUBDIR} COMPONENT Z80Runtime)
 
   # --- SDCC format (optional) ---

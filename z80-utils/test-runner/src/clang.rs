@@ -117,10 +117,10 @@ fn run_single(
     let tmp_dir = unique_tmp_dir(work_dir);
     let _ = std::fs::create_dir_all(&tmp_dir);
 
-    let ihx = tmp_dir.join(format!("{tag}.ihx"));
+    let elf = tmp_dir.join(format!("{tag}.elf"));
     let bin = tmp_dir.join(format!("{tag}.bin"));
 
-    // Compile
+    // Compile + link (integrated assembler + lld → ELF)
     let mut cmd = Command::new(clang.as_os_str());
     cmd.arg(format!("--target={}", target.triple()));
     cmd.arg(format!("-{}", opt.clang_flag()));
@@ -129,7 +129,7 @@ fn run_single(
     }
     cmd.arg(test_file.as_os_str());
     cmd.arg("-o");
-    cmd.arg(ihx.as_os_str());
+    cmd.arg(elf.as_os_str());
 
     match run_cmd_timeout(&mut cmd, COMPILE_TIMEOUT) {
         Err(e) => {
@@ -144,14 +144,18 @@ fn run_single(
         _ => {}
     }
 
-    // makebin
-    if let Err(e) = emulator::makebin(&ihx, &bin) {
+    // ELF → flat binary
+    let objcopy = clang.parent().unwrap().join("llvm-objcopy");
+    if let Err(e) = emulator::elf_to_bin(&objcopy, &elf, &bin) {
         remove_tmp_dir(&tmp_dir);
         return TestResult::fatal(tag, e);
     }
 
     // Emulate
-    let result = match emulator::emulate(&bin, target) {
+    let halt_addr = emulator::halt_addr_from_elf(
+        &clang.parent().unwrap().join("llvm-nm"), &elf)
+        .unwrap_or_else(|| "0x0006".to_string());
+    let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {
             let expected = emulator::parse_expected(source);

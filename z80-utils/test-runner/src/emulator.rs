@@ -7,7 +7,45 @@ use std::time::Duration;
 
 use crate::config::Target;
 
-const HALT_ADDR: &str = "0x0006";
+/// Find the `_halt` symbol address from an SDCC linker map file (.map).
+/// Map file format: "     00000006  _halt"
+pub fn halt_addr_from_map(map_file: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(map_file).ok()?;
+    for line in content.lines() {
+        if let Some(pos) = line.find("_halt") {
+            // Check it's exactly "_halt" (not "_halt_something")
+            let after = pos + "_halt".len();
+            if after < line.len() && line.as_bytes()[after].is_ascii_alphanumeric() {
+                continue;
+            }
+            let addr_str = line[..pos].trim();
+            if let Ok(addr) = u32::from_str_radix(addr_str, 16) {
+                return Some(format!("0x{:04X}", addr));
+            }
+        }
+    }
+    None
+}
+
+/// Find the `_halt` symbol address from an ELF using llvm-nm.
+pub fn halt_addr_from_elf(llvm_nm: &Path, elf: &Path) -> Option<String> {
+    let output = std::process::Command::new(llvm_nm)
+        .arg(elf)
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // llvm-nm output: "0000001c T _halt"
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 3 && parts[2] == "_halt" {
+            if let Ok(addr) = u32::from_str_radix(parts[0], 16) {
+                return Some(format!("0x{:04X}", addr));
+            }
+        }
+    }
+    None
+}
 
 /// Run makebin to convert .ihx to .bin.
 pub fn makebin(ihx: &Path, bin: &Path) -> Result<(), String> {
@@ -24,20 +62,36 @@ pub fn makebin(ihx: &Path, bin: &Path) -> Result<(), String> {
     }
 }
 
+/// Convert ELF to flat binary using llvm-objcopy.
+pub fn elf_to_bin(objcopy: &Path, elf: &Path, bin: &Path) -> Result<(), String> {
+    let output = Command::new(objcopy)
+        .args(["-O", "binary"])
+        .arg(elf.as_os_str())
+        .arg(bin.as_os_str())
+        .output()
+        .map_err(|e| format!("llvm-objcopy: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("llvm-objcopy failed: {stderr}"))
+    }
+}
+
 /// Run z88dk-ticks emulator and extract the result register value.
 ///
 /// `-trace` generates huge stdout (every instruction). We drain it in a
 /// background thread using `BufReader::read_line` with a large internal
 /// buffer, scanning each line for the register pattern.
 /// Only the last matched value is kept.
-pub fn emulate(bin: &Path, target: Target) -> Result<String, String> {
+pub fn emulate(bin: &Path, target: Target, halt_addr: &str) -> Result<String, String> {
     let timeout = Duration::from_secs(target.emu_timeout_secs());
 
     let mut cmd = Command::new("z88dk-ticks");
     for flag in target.emu_flags() {
         cmd.arg(flag);
     }
-    cmd.args(["-trace", "-end", HALT_ADDR]);
+    cmd.args(["-trace", "-end", halt_addr]);
     cmd.arg(bin);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::null());

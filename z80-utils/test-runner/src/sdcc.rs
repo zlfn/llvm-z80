@@ -130,7 +130,7 @@ fn run_single(
     {
         let mut cmd = Command::new(clang.as_os_str());
         cmd.arg(format!("--target={}", target.triple()));
-        cmd.args(["-S"]);
+        cmd.args(["-S", "-fno-integrated-as"]);
         cmd.arg(format!("-{}", opt.clang_flag()));
         if config_omit_fp {
             cmd.arg("-fomit-frame-pointer");
@@ -180,7 +180,7 @@ fn run_single(
         let rt = paths.rt_rel(target);
 
         let mut cmd = Command::new(linker);
-        cmd.arg("-i");
+        cmd.args(["-m", "-i"]);
         cmd.arg(&out_base);
         cmd.arg(&crt0);
         cmd.arg(main_rel);
@@ -209,7 +209,10 @@ fn run_single(
     let source_file = if is_reverse { &sdcc_src } else { &clang_src };
     let source = std::fs::read_to_string(source_file).unwrap_or_default();
 
-    let result = match emulator::emulate(&bin, target) {
+    let map_file = out_base.with_extension("map");
+    let halt_addr = emulator::halt_addr_from_map(&map_file)
+        .unwrap_or_else(|| "0x0006".to_string());
+    let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {
             let expected = emulator::parse_expected(&source);

@@ -219,23 +219,47 @@ fn compile_and_measure_clang(
     expected: &str,
 ) -> Option<CompilerResult> {
     let tag = format!("{name}_clang_{opt}");
-    let ihx = tmp_dir.join(format!("{tag}.ihx"));
+    let elf = tmp_dir.join(format!("{tag}.elf"));
     let bin = tmp_dir.join(format!("{tag}.bin"));
 
+    // Compile + link via ELF toolchain (integrated assembler + lld)
     let mut cmd = Command::new(clang);
     cmd.arg(format!("--target={}", target.triple()));
     cmd.arg(format!("-{}", opt.clang_flag()));
     cmd.arg(src);
     cmd.arg("-o");
-    cmd.arg(&ihx);
+    cmd.arg(&elf);
 
     match suite::run_cmd_timeout(&mut cmd, COMPILE_TIMEOUT) {
-        Err(_) | Ok((_, _, _)) if !ihx.exists() => return None,
+        Err(_) => return None,
         Ok((code, _, _)) if code != 0 => return None,
         _ => {}
     }
+    if !elf.exists() { return None; }
 
-    measure(&ihx, &bin, target, expected)
+    // ELF → flat binary
+    let objcopy = clang.parent().unwrap().join("llvm-objcopy");
+    if emulator::elf_to_bin(&objcopy, &elf, &bin).is_err() {
+        return None;
+    }
+
+    // Code size from ELF (text+data sections, includes crt0 and linked runtime)
+    let llvm_tools = clang.parent().unwrap();
+    let size = elf_text_size(&llvm_tools.join("llvm-size"), &elf)
+        .unwrap_or_else(|| std::fs::metadata(&bin).map(|m| m.len() as u32).unwrap_or(0));
+
+    // Halt address from ELF _halt symbol
+    let halt_addr = emulator::halt_addr_from_elf(&llvm_tools.join("llvm-nm"), &elf)
+        .unwrap_or_else(|| "0x0006".to_string());
+
+    // T-states
+    let tstates = measure_tstates(&bin, target, &halt_addr).unwrap_or(0);
+
+    // Correctness
+    let reg_value = emulator::emulate(&bin, target, &halt_addr).unwrap_or_default();
+    let correct = emulator::check_result(&reg_value, expected).is_ok();
+
+    Some(CompilerResult { size, tstates, reg_value, correct })
 }
 
 fn compile_and_measure_sdcc(
@@ -297,9 +321,9 @@ fn compile_and_measure_sdcc(
         return None;
     }
 
-    // Link
+    // Link (with -m for map file to locate _halt symbol)
     let mut cmd = Command::new(target.linker());
-    cmd.arg("-i");
+    cmd.args(["-m", "-i"]);
     cmd.arg(&base);
     cmd.arg(crt0);
     cmd.arg(&rel_file);
@@ -318,26 +342,49 @@ fn compile_and_measure_sdcc(
         return None;
     }
 
-    measure(&ihx, &bin, target, expected)
+    let map_file = tmp_dir.join(format!("{tag}.map"));
+    let halt_addr = emulator::halt_addr_from_map(&map_file)
+        .unwrap_or_else(|| "0x0006".to_string());
+
+    measure_ihx(&ihx, &bin, target, expected, &halt_addr)
 }
 
-fn measure(ihx: &Path, bin: &Path, target: Target, expected: &str) -> Option<CompilerResult> {
-    // Code size from IHX
+fn measure_ihx(ihx: &Path, bin: &Path, target: Target, expected: &str, halt_addr: &str) -> Option<CompilerResult> {
+    // Code size from IHX data records (actual code+data bytes, not padded binary)
     let size = ihx_code_size(ihx);
 
-    // makebin
+    // makebin: IHX → flat binary
     if emulator::makebin(ihx, bin).is_err() {
         return None;
     }
 
     // T-states (non-trace mode)
-    let tstates = measure_tstates(bin, target).unwrap_or(0);
+    let tstates = measure_tstates(bin, target, halt_addr).unwrap_or(0);
 
     // Correctness
-    let reg_value = emulator::emulate(bin, target).unwrap_or_default();
+    let reg_value = emulator::emulate(bin, target, halt_addr).unwrap_or_default();
     let correct = emulator::check_result(&reg_value, expected).is_ok();
 
     Some(CompilerResult { size, tstates, reg_value, correct })
+}
+
+/// Extract total loaded section sizes from an ELF using llvm-size.
+fn elf_text_size(llvm_size: &Path, elf: &Path) -> Option<u32> {
+    let output = Command::new(llvm_size)
+        .arg(elf)
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    // llvm-size output (Berkeley format):
+    //    text    data     bss     dec     hex filename
+    //    1234      56       0    1290     50a file.elf
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().nth(1)?;
+    let cols: Vec<&str> = line.split_whitespace().collect();
+    if cols.len() < 3 { return None; }
+    let text: u32 = cols[0].parse().ok()?;
+    let data: u32 = cols[1].parse().ok()?;
+    Some(text + data)
 }
 
 fn ihx_code_size(ihx: &Path) -> u32 {
@@ -355,12 +402,12 @@ fn ihx_code_size(ihx: &Path) -> u32 {
     total
 }
 
-fn measure_tstates(bin: &Path, target: Target) -> Option<u64> {
+fn measure_tstates(bin: &Path, target: Target, halt_addr: &str) -> Option<u64> {
     let mut cmd = Command::new("z88dk-ticks");
     for flag in target.emu_flags() {
         cmd.arg(flag);
     }
-    cmd.args(["-end", "0x0006"]);
+    cmd.args(["-end", halt_addr]);
     cmd.arg(bin);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());

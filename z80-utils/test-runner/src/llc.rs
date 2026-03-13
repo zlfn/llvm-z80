@@ -136,7 +136,7 @@ fn run_single(
         let rt_name = rt_lib.file_stem().unwrap();
 
         let mut cmd = Command::new(target.linker());
-        cmd.arg("-i");
+        cmd.args(["-m", "-i"]);
         cmd.arg(&out_base);
         cmd.arg(&rel_out);
         cmd.arg("-k");
@@ -159,7 +159,10 @@ fn run_single(
     }
 
     // Emulate
-    let result = match emulator::emulate(&bin, target) {
+    let map_file = ihx.with_extension("map");
+    let halt_addr = emulator::halt_addr_from_map(&map_file)
+        .unwrap_or_else(|| "0x0006".to_string());
+    let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {
             let expected = emulator::parse_expected(source);

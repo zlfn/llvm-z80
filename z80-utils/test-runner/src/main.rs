@@ -8,6 +8,7 @@ mod llc;
 mod run_all;
 mod sdcc;
 mod suite;
+mod utils;
 
 use std::process::ExitCode;
 
@@ -38,6 +39,7 @@ fn main() -> ExitCode {
         "custom" => cmd_custom(&args[1..]),
         "sdcc" => cmd_sdcc(&args[1..]),
         "llc" => cmd_llc(&args[1..]),
+        "utils" => cmd_utils(&args[1..]),
         "help" | "--help" | "-h" => {
             print_help();
             ExitCode::SUCCESS
@@ -69,6 +71,7 @@ Commands:
   custom     Compile-check arbitrary .c or .ll files
   sdcc       Run SDCC compatibility test suite
   llc        Run LLC (LLVM IR) test suite
+  utils      Run elf2rel/rel2elf roundtrip and crosslink tests
   help       Show this help
 
 Run-all options:
@@ -356,6 +359,42 @@ fn cmd_custom(args: &[String]) -> ExitCode {
     let result = custom::run(&paths, &config, &mut print_callback());
 
     if result.all_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn cmd_utils(args: &[String]) -> ExitCode {
+    let mut target = Target::Z80;
+    let mut opt = config::OptLevel::O1;
+    let mut pattern = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-target" => target = parse_target(args, &mut i),
+            "-opt" => {
+                i += 1;
+                if i < args.len() {
+                    if let Some(o) = config::OptLevel::parse(&args[i]) {
+                        opt = o;
+                    } else {
+                        eprintln!("invalid opt level: {}", args[i]);
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+            s if !s.starts_with('-') => pattern = Some(s.to_string()),
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let paths = Paths::resolve();
+    let config = utils::UtilsConfig { target, opt, pattern };
+
+    if utils::run_parallel(&paths, &config) {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

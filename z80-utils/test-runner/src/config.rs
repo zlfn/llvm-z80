@@ -139,7 +139,7 @@ impl Paths {
 
         let build_dir = std::env::var("BUILD_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| project_dir.join("../build"));
+            .unwrap_or_else(|_| project_dir.join("../../build"));
 
         let build_dir = build_dir.canonicalize().unwrap_or(build_dir);
 
@@ -155,6 +155,10 @@ impl Paths {
 
     pub fn llc(&self) -> PathBuf {
         self.build_dir.join("bin/llc")
+    }
+
+    pub fn objcopy(&self) -> PathBuf {
+        self.build_dir.join("bin/llvm-objcopy")
     }
 
     pub fn clang_test_dir(&self) -> PathBuf {
@@ -193,20 +197,30 @@ fn find_project_dir() -> Option<PathBuf> {
     // Try exe path first (works for installed binary)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            // If exe is in target/release or target/debug, go up
-            let candidate = dir.join("../../Cargo.toml");
-            if candidate.exists() {
-                return dir.join("../..").canonicalize().ok();
+            // Workspace layout: exe is in <workspace>/target/debug/
+            // test-runner dir is <workspace>/test-runner/
+            if let Some(workspace) = dir.join("../..").canonicalize().ok() {
+                let test_runner = workspace.join("test-runner");
+                if test_runner.join("testcases").exists() {
+                    return Some(test_runner);
+                }
+                // Old layout: testcases directly under project root
+                if workspace.join("testcases").exists() {
+                    return Some(workspace);
+                }
             }
         }
     }
     // Fall back to CWD
     let cwd = std::env::current_dir().ok()?;
-    if cwd.join("Cargo.toml").exists() {
-        Some(cwd)
-    } else {
-        None
+    // Workspace root: check test-runner subdir
+    if cwd.join("test-runner/testcases").exists() {
+        return Some(cwd.join("test-runner"));
     }
+    if cwd.join("testcases").exists() {
+        return Some(cwd);
+    }
+    None
 }
 
 /// Discover SDCC runtime library path.

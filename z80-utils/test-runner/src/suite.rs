@@ -52,7 +52,7 @@ impl TestResult {
 /// Receives the TestResult and the target's register name (e.g. "DE").
 pub type OnResult = Box<dyn FnMut(&TestResult, &str) + Send>;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct SuiteResult {
     pub pass: u32,
     pub fail: u32,
@@ -73,6 +73,15 @@ impl SuiteResult {
         }
         on_result(&result, reg_name);
         self.results.push(result);
+    }
+
+    /// Merge counters from another SuiteResult (results already reported via on_result).
+    pub fn merge(&mut self, other: SuiteResult) {
+        self.pass += other.pass;
+        self.fail += other.fail;
+        self.fatal += other.fatal;
+        self.skip += other.skip;
+        self.total += other.total;
     }
 
     pub fn all_ok(&self) -> bool {

@@ -22,7 +22,7 @@ ___modhi3_pos_divisor:
 	pop	af
 	bit	7, a
 	ret	z		; dividend was positive
-	jr	__neg_bc		; negate and return (tail call)
+	jp	__neg_bc		; negate and return (tail call)
 
 ;===------------------------------------------------------------------------===;
 ; __call_hl - Indirect call trampoline

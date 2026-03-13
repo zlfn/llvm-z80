@@ -8,19 +8,16 @@ use std::time::Duration;
 use crate::config::Target;
 
 /// Find the `_halt` symbol address from an SDCC linker map file (.map).
-/// Map file format: "     00000006  _halt"
+/// Map entries are separated by `|`, each formatted as "  ADDR  SYMBOL  ".
 pub fn halt_addr_from_map(map_file: &Path) -> Option<String> {
     let content = std::fs::read_to_string(map_file).ok()?;
     for line in content.lines() {
-        if let Some(pos) = line.find("_halt") {
-            // Check it's exactly "_halt" (not "_halt_something")
-            let after = pos + "_halt".len();
-            if after < line.len() && line.as_bytes()[after].is_ascii_alphanumeric() {
-                continue;
-            }
-            let addr_str = line[..pos].trim();
-            if let Ok(addr) = u32::from_str_radix(addr_str, 16) {
-                return Some(format!("0x{:04X}", addr));
+        for entry in line.split('|') {
+            let parts: Vec<&str> = entry.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1] == "_halt" {
+                if let Ok(addr) = u32::from_str_radix(parts[0], 16) {
+                    return Some(format!("0x{:04X}", addr));
+                }
             }
         }
     }

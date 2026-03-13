@@ -6,7 +6,7 @@
 define void @_start() {
   call void asm sideeffect "ld sp, #0xFFFE", ""()
   %r = call i16 @main()
-  call void asm sideeffect "halt", ""()
+  call void asm sideeffect ".globl _halt\0A_halt:\0Ahalt", ""()
   ret void
 }
 

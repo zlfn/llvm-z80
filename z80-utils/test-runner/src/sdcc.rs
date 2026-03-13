@@ -197,8 +197,13 @@ fn run_single(
     let source = std::fs::read_to_string(source_file).unwrap_or_default();
 
     let map_file = out_base.with_extension("map");
-    let halt_addr = emulator::halt_addr_from_map(&map_file)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = match emulator::halt_addr_from_map(&map_file) {
+        Some(addr) => addr,
+        None => {
+            remove_tmp_dir(&tmp_dir);
+            return TestResult::fatal(tag, "_halt symbol not found in map file");
+        }
+    };
     let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {

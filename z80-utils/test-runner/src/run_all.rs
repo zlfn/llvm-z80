@@ -10,6 +10,7 @@ use crate::display;
 use crate::llc::LlcConfig;
 use crate::sdcc::SdccConfig;
 use crate::suite::{OnResult, SuiteResult};
+use crate::utils::{self, UtilsConfig};
 use crate::{clang, llc, sdcc};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -246,6 +247,8 @@ fn build_suites(mode: &Mode) -> Vec<SuiteDef> {
             add_clang(&mut suites, &format!("clang Z80 -omit-fp {label_suffix}"), Target::Z80, opts.clone(), false, true);
             add_clang_filtered(&mut suites, &format!("clang Z80 -ffast-math {label_suffix}"), Target::Z80, opts.clone(), true, false, Some("f32".into()));
             add_clang_filtered(&mut suites, &format!("clang SM83 -ffast-math {label_suffix}"), Target::SM83, opts.clone(), true, false, Some("f32".into()));
+            add_clang_inline_rt(&mut suites, &format!("clang Z80 -inline-i16-rt {label_suffix}"), Target::Z80, opts.clone());
+            add_clang_inline_rt(&mut suites, &format!("clang SM83 -inline-i16-rt {label_suffix}"), Target::SM83, opts.clone());
         }
         Mode::Full => {
             add_clang(&mut suites, "clang Z80 (all)", Target::Z80, all_opts.clone(), false, false);
@@ -253,6 +256,8 @@ fn build_suites(mode: &Mode) -> Vec<SuiteDef> {
             add_clang(&mut suites, "clang Z80 -omit-fp (all)", Target::Z80, all_opts.clone(), false, true);
             add_clang_filtered(&mut suites, "clang Z80 -ffast-math (all)", Target::Z80, all_opts.clone(), true, false, Some("f32".into()));
             add_clang_filtered(&mut suites, "clang SM83 -ffast-math (all)", Target::SM83, all_opts.clone(), true, false, Some("f32".into()));
+            add_clang_inline_rt(&mut suites, "clang Z80 -inline-i16-rt (all)", Target::Z80, all_opts.clone());
+            add_clang_inline_rt(&mut suites, "clang SM83 -inline-i16-rt (all)", Target::SM83, all_opts.clone());
         }
         Mode::Default => {
             add_clang(&mut suites, "clang Z80 O1", Target::Z80, vec![OptLevel::O1], false, false);
@@ -288,6 +293,9 @@ fn build_suites(mode: &Mode) -> Vec<SuiteDef> {
 
     add_custom(&mut suites, "custom Z80", Target::Z80);
     add_custom(&mut suites, "custom SM83", Target::SM83);
+
+    add_utils(&mut suites, "utils Z80", Target::Z80);
+    add_utils(&mut suites, "utils SM83", Target::SM83);
 
     suites
 }
@@ -460,6 +468,28 @@ fn add_custom(
             };
             let mut cb = progress_callback(state.clone(), idx);
             let result = custom::run(paths, &config, &mut cb);
+            state.lock().unwrap()[idx].result = Some(result);
+        }),
+    });
+}
+
+fn add_utils(
+    suites: &mut Vec<SuiteDef>,
+    label: &str,
+    target: Target,
+) {
+    let label = label.to_string();
+    suites.push(SuiteDef {
+        label: label.clone(),
+        runner: Box::new(move |paths, state, idx| {
+            // Pre-count: 6 groups × number of clang test files
+            let test_dir = paths.clang_test_dir();
+            let test_count = crate::suite::discover_tests(&test_dir, "test_", "c").len() as u32;
+            state.lock().unwrap()[idx].total = test_count * 6;
+
+            let config = UtilsConfig { target, opt: OptLevel::O1, pattern: None };
+            let mut cb = progress_callback(state.clone(), idx);
+            let result = utils::run(paths, &config, &mut cb);
             state.lock().unwrap()[idx].result = Some(result);
         }),
     });

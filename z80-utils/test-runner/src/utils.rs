@@ -53,6 +53,24 @@ fn progress_callback(state: SharedState, idx: usize) -> OnResult {
     })
 }
 
+/// Run all 6 test groups sequentially, collecting results into a single SuiteResult.
+/// Used by run_all to integrate utils as one suite.
+pub fn run(paths: &Paths, config: &UtilsConfig, on_result: &mut OnResult) -> SuiteResult {
+    let target = config.target;
+    let opt = config.opt;
+    let pattern = config.pattern.as_deref();
+    let mut result = SuiteResult::default();
+
+    result.merge(run_group_elf_roundtrip(paths, target, opt, pattern, on_result));
+    result.merge(run_group_rel_roundtrip(paths, target, opt, pattern, on_result));
+    result.merge(run_group_elf_crosslink(paths, target, opt, pattern, on_result));
+    result.merge(run_group_rel_crosslink(paths, target, opt, pattern, on_result));
+    result.merge(run_group_elf_ar_roundtrip(paths, target, opt, pattern, on_result));
+    result.merge(run_group_rel_ar_roundtrip(paths, target, opt, pattern, on_result));
+
+    result
+}
+
 /// Run all 6 test groups in parallel with a progress display.
 /// Returns true if all tests passed.
 pub fn run_parallel(paths: &Paths, config: &UtilsConfig) -> bool {
@@ -241,71 +259,27 @@ fn build_groups(config: &UtilsConfig) -> Vec<GroupDef> {
 
     let mut groups = Vec::new();
 
-    // Group 1: ELF roundtrip
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "elf roundtrip".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_elf_roundtrip(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
+    macro_rules! add_group {
+        ($label:expr, $func:ident, $pat:expr) => {{
+            let pat = $pat.clone();
+            groups.push(GroupDef {
+                label: $label.into(),
+                runner: Box::new(move |paths, state, idx| {
+                    let mut cb = progress_callback(state.clone(), idx);
+                    let result = $func(paths, target, opt, pat.as_deref(), &mut cb);
+                    state.lock().unwrap()[idx].total = result.total;
+                    state.lock().unwrap()[idx].result = Some(result);
+                }),
+            });
+        }};
     }
 
-    // Group 2: REL roundtrip
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "rel roundtrip".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_rel_roundtrip(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
-    }
-
-    // Group 3: elf2rel crosslink
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "elf2rel crosslink".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_elf_crosslink(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
-    }
-
-    // Group 4: rel2elf crosslink
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "rel2elf crosslink".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_rel_crosslink(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
-    }
-
-    // Group 5: ELF archive roundtrip
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "elf archive roundtrip".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_elf_ar_roundtrip(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
-    }
-
-    // Group 6: REL archive roundtrip
-    {
-        let pat = pattern.clone();
-        groups.push(GroupDef {
-            label: "rel archive roundtrip".into(),
-            runner: Box::new(move |paths, state, idx| {
-                run_group_rel_ar_roundtrip(paths, target, opt, pat.as_deref(), state, idx);
-            }),
-        });
-    }
+    add_group!("elf roundtrip", run_group_elf_roundtrip, pattern);
+    add_group!("rel roundtrip", run_group_rel_roundtrip, pattern);
+    add_group!("elf2rel crosslink", run_group_elf_crosslink, pattern);
+    add_group!("rel2elf crosslink", run_group_rel_crosslink, pattern);
+    add_group!("elf archive roundtrip", run_group_elf_ar_roundtrip, pattern);
+    add_group!("rel archive roundtrip", run_group_rel_ar_roundtrip, pattern);
 
     groups
 }
@@ -384,9 +358,11 @@ fn run_elf_binary(clang: &Path, elf: &Path, source: &str, target: Target, tag: &
     if let Err(e) = emulator::elf_to_bin(&objcopy, elf, &bin) {
         return TestResult::fatal(tag, e);
     }
-    let halt_addr = emulator::halt_addr_from_elf(
-        &clang.parent().unwrap().join("llvm-nm"), elf)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = match emulator::halt_addr_from_elf(
+        &clang.parent().unwrap().join("llvm-nm"), elf) {
+        Some(addr) => addr,
+        None => return TestResult::fatal(tag, "_halt symbol not found in ELF"),
+    };
     match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {
@@ -469,8 +445,10 @@ fn run_ihx_binary(ihx: &Path, source: &str, target: Target, tag: &str) -> TestRe
         return TestResult::fatal(tag, e);
     }
     let map_file = ihx.with_extension("map");
-    let halt_addr = emulator::halt_addr_from_map(&map_file)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = match emulator::halt_addr_from_map(&map_file) {
+        Some(addr) => addr,
+        None => return TestResult::fatal(tag, "_halt symbol not found in map file"),
+    };
     match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {
@@ -503,22 +481,12 @@ fn clang_to_rel(
 
 fn run_group_elf_roundtrip(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.clang_test_dir();
     let clang = paths.clang();
     let tests = discover_tests(&test_dir, "test_", "c");
-
-    let count = tests.iter()
-        .filter(|t| {
-            let name = t.file_stem().unwrap().to_string_lossy();
-            pattern.map_or(true, |p| name.contains(p))
-        })
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
     for test_file in &tests {
@@ -530,16 +498,16 @@ fn run_group_elf_roundtrip(
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
         if let Some(reason) = check_skip_c(&source, target, &[]) {
             let tag = format!("{name}_elf_rt");
-            result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
+            result.add(TestResult::skip(&tag, &reason), cb, reg_name);
             continue;
         }
 
         let tag = format!("{name}_elf_rt");
         let r = test_elf_roundtrip(&clang, test_file, &tag, target, opt, &source, &test_dir);
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_elf_roundtrip(
@@ -578,22 +546,12 @@ fn test_elf_roundtrip(
 
 fn run_group_rel_roundtrip(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.clang_test_dir();
     let clang = paths.clang();
     let tests = discover_tests(&test_dir, "test_", "c");
-
-    let count = tests.iter()
-        .filter(|t| {
-            let name = t.file_stem().unwrap().to_string_lossy();
-            pattern.map_or(true, |p| name.contains(p))
-        })
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
     for test_file in &tests {
@@ -605,16 +563,16 @@ fn run_group_rel_roundtrip(
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
         if let Some(reason) = check_skip_c(&source, target, &["-fno-integrated-as"]) {
             let tag = format!("{name}_rel_rt");
-            result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
+            result.add(TestResult::skip(&tag, &reason), cb, reg_name);
             continue;
         }
 
         let tag = format!("{name}_rel_rt");
         let r = test_rel_roundtrip(&clang, test_file, &tag, target, opt, &source, &test_dir, paths);
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_rel_roundtrip(
@@ -655,19 +613,12 @@ fn test_rel_roundtrip(
 
 fn run_group_elf_crosslink(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.sdcc_test_dir();
     let clang = paths.clang();
     let test_names = discover_sdcc_test_names(&test_dir);
-
-    let count = test_names.iter()
-        .filter(|n| pattern.map_or(true, |p| n.contains(p)))
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
     for test_name in &test_names {
@@ -684,10 +635,10 @@ fn run_group_elf_crosslink(
             &clang, &clang_src, &sdcc_src, &tag, test_name,
             target, opt, &test_dir, paths,
         );
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_elf_crosslink(
@@ -736,19 +687,12 @@ fn test_elf_crosslink(
 
 fn run_group_rel_crosslink(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.sdcc_test_dir();
     let clang = paths.clang();
     let test_names = discover_sdcc_test_names(&test_dir);
-
-    let count = test_names.iter()
-        .filter(|n| pattern.map_or(true, |p| n.contains(p)))
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
     for test_name in &test_names {
@@ -765,10 +709,10 @@ fn run_group_rel_crosslink(
             &clang, &clang_src, &sdcc_src, &tag, test_name,
             target, opt, &test_dir,
         );
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_rel_crosslink(
@@ -824,22 +768,12 @@ fn test_rel_crosslink(
 
 fn run_group_elf_ar_roundtrip(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.clang_test_dir();
     let clang = paths.clang();
     let tests = discover_tests(&test_dir, "test_", "c");
-
-    let count = tests.iter()
-        .filter(|t| {
-            let name = t.file_stem().unwrap().to_string_lossy();
-            pattern.map_or(true, |p| name.contains(p))
-        })
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
     // Roundtrip the runtime archive: .a (ELF) → elf2rel → .lib → rel2elf → .a
@@ -851,29 +785,24 @@ fn run_group_elf_ar_roundtrip(
     // Convert the .lib to .a first, then roundtrip it.
     let rt_lib_path = paths.rt_lib(target);
     let roundtripped_a = if rt_lib_path.exists() {
-        // .lib → rel2elf → .a (initial)
         let initial_a = tmp_ar.join("initial_rt.a");
         match run_rel2elf(&rt_lib_path, &initial_a) {
             Ok(()) => {
-                // .a → elf2rel → .lib (roundtrip step 1)
                 let rt_lib = tmp_ar.join("roundtrip_rt.lib");
                 match run_elf2rel(&initial_a, &rt_lib) {
                     Ok(()) => {
-                        // .lib → rel2elf → .a (roundtrip step 2)
                         let rt_a = tmp_ar.join("roundtrip_rt.a");
                         match run_rel2elf(&rt_lib, &rt_a) {
                             Ok(()) => Some(rt_a),
                             Err(e) => {
-                                // Fatal: can't roundtrip archive, skip all tests
                                 for test_file in &tests {
                                     let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
                                     if let Some(pat) = pattern { if !name.contains(pat) { continue; } }
                                     let tag = format!("{name}_elf_ar");
-                                    result.add(TestResult::fatal(&tag, format!("ar roundtrip: {e}")), &mut cb, reg_name);
+                                    result.add(TestResult::fatal(&tag, format!("ar roundtrip: {e}")), cb, reg_name);
                                 }
-                                state.lock().unwrap()[idx].result = Some(result);
                                 remove_tmp_dir(&tmp_ar);
-                                return;
+                                return result;
                             }
                         }
                     }
@@ -882,11 +811,10 @@ fn run_group_elf_ar_roundtrip(
                             let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
                             if let Some(pat) = pattern { if !name.contains(pat) { continue; } }
                             let tag = format!("{name}_elf_ar");
-                            result.add(TestResult::fatal(&tag, format!("elf2rel .a→.lib: {e}")), &mut cb, reg_name);
+                            result.add(TestResult::fatal(&tag, format!("elf2rel .a→.lib: {e}")), cb, reg_name);
                         }
-                        state.lock().unwrap()[idx].result = Some(result);
                         remove_tmp_dir(&tmp_ar);
-                        return;
+                        return result;
                     }
                 }
             }
@@ -895,18 +823,16 @@ fn run_group_elf_ar_roundtrip(
                     let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
                     if let Some(pat) = pattern { if !name.contains(pat) { continue; } }
                     let tag = format!("{name}_elf_ar");
-                    result.add(TestResult::fatal(&tag, format!("rel2elf .lib→.a: {e}")), &mut cb, reg_name);
+                    result.add(TestResult::fatal(&tag, format!("rel2elf .lib→.a: {e}")), cb, reg_name);
                 }
-                state.lock().unwrap()[idx].result = Some(result);
                 remove_tmp_dir(&tmp_ar);
-                return;
+                return result;
             }
         }
     } else {
         None
     };
 
-    // Now link each test program using the roundtripped .a
     for test_file in &tests {
         let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
         if let Some(pat) = pattern {
@@ -916,7 +842,7 @@ fn run_group_elf_ar_roundtrip(
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
         if let Some(reason) = check_skip_c(&source, target, &[]) {
             let tag = format!("{name}_elf_ar");
-            result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
+            result.add(TestResult::skip(&tag, &reason), cb, reg_name);
             continue;
         }
 
@@ -925,11 +851,11 @@ fn run_group_elf_ar_roundtrip(
             &clang, test_file, &tag, target, opt, &source, &test_dir,
             roundtripped_a.as_deref(),
         );
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
     remove_tmp_dir(&tmp_ar);
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_elf_ar_roundtrip(
@@ -960,35 +886,22 @@ fn test_elf_ar_roundtrip(
 
 fn run_group_rel_ar_roundtrip(
     paths: &Paths, target: Target, opt: OptLevel, pattern: Option<&str>,
-    state: SharedState, idx: usize,
-) {
+    cb: &mut OnResult,
+) -> SuiteResult {
     let test_dir = paths.clang_test_dir();
     let clang = paths.clang();
     let tests = discover_tests(&test_dir, "test_", "c");
-
-    let count = tests.iter()
-        .filter(|t| {
-            let name = t.file_stem().unwrap().to_string_lossy();
-            pattern.map_or(true, |p| name.contains(p))
-        })
-        .count() as u32;
-    state.lock().unwrap()[idx].total = count;
-
     let reg_name = target.reg_name();
-    let mut cb = progress_callback(state.clone(), idx);
     let mut result = SuiteResult::default();
 
-    // Roundtrip the runtime archive: .lib → rel2elf → .a → elf2rel → .lib
     let tmp_ar = unique_tmp_dir(&test_dir);
     let _ = std::fs::create_dir_all(&tmp_ar);
 
     let rt_lib_path = paths.rt_lib(target);
     let roundtripped_lib = if rt_lib_path.exists() {
-        // .lib → rel2elf → .a
         let rt_a = tmp_ar.join("roundtrip_rt.a");
         match run_rel2elf(&rt_lib_path, &rt_a) {
             Ok(()) => {
-                // .a → elf2rel → .lib
                 let rt_lib = tmp_ar.join("roundtrip_rt.lib");
                 match run_elf2rel(&rt_a, &rt_lib) {
                     Ok(()) => Some(rt_lib),
@@ -997,11 +910,10 @@ fn run_group_rel_ar_roundtrip(
                             let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
                             if let Some(pat) = pattern { if !name.contains(pat) { continue; } }
                             let tag = format!("{name}_rel_ar");
-                            result.add(TestResult::fatal(&tag, format!("elf2rel .a→.lib: {e}")), &mut cb, reg_name);
+                            result.add(TestResult::fatal(&tag, format!("elf2rel .a→.lib: {e}")), cb, reg_name);
                         }
-                        state.lock().unwrap()[idx].result = Some(result);
                         remove_tmp_dir(&tmp_ar);
-                        return;
+                        return result;
                     }
                 }
             }
@@ -1010,11 +922,10 @@ fn run_group_rel_ar_roundtrip(
                     let name = test_file.file_stem().unwrap().to_string_lossy().to_string();
                     if let Some(pat) = pattern { if !name.contains(pat) { continue; } }
                     let tag = format!("{name}_rel_ar");
-                    result.add(TestResult::fatal(&tag, format!("rel2elf .lib→.a: {e}")), &mut cb, reg_name);
+                    result.add(TestResult::fatal(&tag, format!("rel2elf .lib→.a: {e}")), cb, reg_name);
                 }
-                state.lock().unwrap()[idx].result = Some(result);
                 remove_tmp_dir(&tmp_ar);
-                return;
+                return result;
             }
         }
     } else {
@@ -1030,7 +941,7 @@ fn run_group_rel_ar_roundtrip(
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
         if let Some(reason) = check_skip_c(&source, target, &["-fno-integrated-as"]) {
             let tag = format!("{name}_rel_ar");
-            result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
+            result.add(TestResult::skip(&tag, &reason), cb, reg_name);
             continue;
         }
 
@@ -1039,11 +950,11 @@ fn run_group_rel_ar_roundtrip(
             &clang, test_file, &tag, target, opt, &source, &test_dir, paths,
             roundtripped_lib.as_deref(),
         );
-        result.add(r, &mut cb, reg_name);
+        result.add(r, cb, reg_name);
     }
 
     remove_tmp_dir(&tmp_ar);
-    state.lock().unwrap()[idx].result = Some(result);
+    result
 }
 
 fn test_rel_ar_roundtrip(

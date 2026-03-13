@@ -160,8 +160,13 @@ fn run_single(
 
     // Emulate
     let map_file = ihx.with_extension("map");
-    let halt_addr = emulator::halt_addr_from_map(&map_file)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = match emulator::halt_addr_from_map(&map_file) {
+        Some(addr) => addr,
+        None => {
+            remove_tmp_dir(&tmp_dir);
+            return TestResult::fatal(tag, "_halt symbol not found in map file");
+        }
+    };
     let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {

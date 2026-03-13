@@ -249,8 +249,7 @@ fn compile_and_measure_clang(
         .unwrap_or_else(|| std::fs::metadata(&bin).map(|m| m.len() as u32).unwrap_or(0));
 
     // Halt address from ELF _halt symbol
-    let halt_addr = emulator::halt_addr_from_elf(&llvm_tools.join("llvm-nm"), &elf)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = emulator::halt_addr_from_elf(&llvm_tools.join("llvm-nm"), &elf)?;
 
     // T-states
     let tstates = measure_tstates(&bin, target, &halt_addr).unwrap_or(0);
@@ -304,10 +303,6 @@ fn compile_and_measure_sdcc(
     }
 
     // Assemble
-    let mut cmd = Command::new(target.assembler());
-    cmd.args(["-g", "-o"]);
-    cmd.arg(&rel_file);
-    cmd.arg(&asm_file);
     if Command::new(target.assembler())
         .args(["-g", "-o"])
         .arg(&rel_file)
@@ -343,8 +338,7 @@ fn compile_and_measure_sdcc(
     }
 
     let map_file = tmp_dir.join(format!("{tag}.map"));
-    let halt_addr = emulator::halt_addr_from_map(&map_file)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = emulator::halt_addr_from_map(&map_file)?;
 
     measure_ihx(&ihx, &bin, target, expected, &halt_addr)
 }

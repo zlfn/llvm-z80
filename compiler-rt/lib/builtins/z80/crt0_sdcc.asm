@@ -42,3 +42,6 @@ _bss_done:
 	call	_main
 _halt:
 	halt
+
+	;; Declare _BSS area so sdldz80 generates s__BSS and l__BSS symbols.
+	.area _BSS

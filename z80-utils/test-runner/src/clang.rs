@@ -152,9 +152,11 @@ fn run_single(
     }
 
     // Emulate
-    let halt_addr = emulator::halt_addr_from_elf(
-        &clang.parent().unwrap().join("llvm-nm"), &elf)
-        .unwrap_or_else(|| "0x0006".to_string());
+    let halt_addr = match emulator::halt_addr_from_elf(
+        &clang.parent().unwrap().join("llvm-nm"), &elf) {
+        Some(addr) => addr,
+        None => return TestResult::fatal(tag, "_halt symbol not found in ELF"),
+    };
     let result = match emulator::emulate(&bin, target, &halt_addr) {
         Err(e) => TestResult::fatal(tag, e),
         Ok(got) => {

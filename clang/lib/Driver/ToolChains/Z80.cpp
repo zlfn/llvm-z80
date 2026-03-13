@@ -110,16 +110,22 @@ void z80::SDCCLinker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Auto-link runtime library archive if found.
   // Use -k <dir> -l <name> for selective linking (only referenced modules).
-  SmallString<256> LibDir(TC.getDriver().Dir);
-  llvm::sys::path::append(LibDir, "..", "lib", SubDir);
-  SmallString<256> LibFile(LibDir);
-  llvm::sys::path::append(LibFile, RtLibName);
-  if (llvm::sys::fs::exists(LibFile)) {
-    CmdArgs.push_back("-k");
-    CmdArgs.push_back(Args.MakeArgString(LibDir));
-    CmdArgs.push_back("-l");
-    CmdArgs.push_back(RtLibBase);
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+    SmallString<256> LibDir(TC.getDriver().Dir);
+    llvm::sys::path::append(LibDir, "..", "lib", SubDir);
+    SmallString<256> LibFile(LibDir);
+    llvm::sys::path::append(LibFile, RtLibName);
+    if (llvm::sys::fs::exists(LibFile)) {
+      CmdArgs.push_back("-k");
+      CmdArgs.push_back(Args.MakeArgString(LibDir));
+      CmdArgs.push_back("-l");
+      CmdArgs.push_back(RtLibBase);
+    }
   }
+
+  // Forward user linker flags (-Wl, -Xlinker).
+  Args.AddAllArgs(CmdArgs, options::OPT_Wl_COMMA);
+  Args.AddAllArgs(CmdArgs, options::OPT_Xlinker);
 
   const char *Exec = Args.MakeArgString(TC.GetProgramPath(LinkerName));
   C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
@@ -179,11 +185,13 @@ void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back(Output.getFilename());
 
   // Link crt0 first so startup code is at address 0x0000.
-  SmallString<256> Crt0Path(TC.getDriver().Dir);
-  llvm::sys::path::append(Crt0Path, "..", "lib", SubDir,
-                           IsSM83 ? "sm83_crt0.o" : "z80_crt0.o");
-  if (llvm::sys::fs::exists(Crt0Path))
-    CmdArgs.push_back(Args.MakeArgString(Crt0Path));
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
+    SmallString<256> Crt0Path(TC.getDriver().Dir);
+    llvm::sys::path::append(Crt0Path, "..", "lib", SubDir,
+                             IsSM83 ? "sm83_crt0.o" : "z80_crt0.o");
+    if (llvm::sys::fs::exists(Crt0Path))
+      CmdArgs.push_back(Args.MakeArgString(Crt0Path));
+  }
 
   // Add input object files.
   for (const auto &II : Inputs) {
@@ -192,11 +200,17 @@ void z80::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   // Auto-link runtime library archive if found.
-  SmallString<256> RtLib(TC.getDriver().Dir);
-  llvm::sys::path::append(RtLib, "..", "lib", SubDir,
-                           IsSM83 ? "sm83_rt.a" : "z80_rt.a");
-  if (llvm::sys::fs::exists(RtLib))
-    CmdArgs.push_back(Args.MakeArgString(RtLib));
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+    SmallString<256> RtLib(TC.getDriver().Dir);
+    llvm::sys::path::append(RtLib, "..", "lib", SubDir,
+                             IsSM83 ? "sm83_rt.a" : "z80_rt.a");
+    if (llvm::sys::fs::exists(RtLib))
+      CmdArgs.push_back(Args.MakeArgString(RtLib));
+  }
+
+  // Forward user linker flags (-Wl, -Xlinker).
+  Args.AddAllArgs(CmdArgs, options::OPT_Wl_COMMA);
+  Args.AddAllArgs(CmdArgs, options::OPT_Xlinker);
 
   const char *Exec = Args.MakeArgString(TC.GetProgramPath("ld.lld"));
   C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
@@ -232,6 +246,13 @@ void Z80ToolChain::addClangTargetOptions(const ArgList &DriverArgs,
   // When using the external SDCC assembler, emit sdasz80 assembly format.
   // With the integrated assembler, assembly goes directly through MC.
   if (!useIntegratedAs()) {
+    // ELF triples require the integrated assembler — sdasz80 produces .rel
+    // files incompatible with ld.lld. Use -target z80-*-*-sdcc for the
+    // external assembler toolchain.
+    if (getTriple().getEnvironment() != llvm::Triple::SDCC) {
+      getDriver().Diag(diag::err_drv_unsupported_opt_for_target)
+          << "-fno-integrated-as" << getTriple().str();
+    }
     CC1Args.push_back("-mllvm");
     CC1Args.push_back("-z80-asm-format=sdasz80");
   }

@@ -33,14 +33,14 @@ def SM83_RETI : Inst8<"reti", 0xD9>, InstReturn;
 
 // LDHL SP,e - Load SP + signed 8-bit offset into HL (opcode 0xF8)
 // sdasgb syntax: ldhl sp,#imm
-def LDHL_SP_e : Inst16Imm<"ldhl sp,", 0xF8> {
+def LDHL_SP_e : Inst16SImm<"ldhl sp,", 0xF8> {
   let Uses = [SP];
   let Defs = [HL, FLAGS];
 }
 
 // ADD SP,e - Add signed 8-bit immediate to SP (opcode 0xE8)
 // sdasgb syntax: add sp,#imm
-def ADD_SP_e : Inst16Imm<"add sp,", 0xE8> {
+def ADD_SP_e : Inst16SImm<"add sp,", 0xE8> {
   let Uses = [SP];
   let Defs = [SP, FLAGS];
 }

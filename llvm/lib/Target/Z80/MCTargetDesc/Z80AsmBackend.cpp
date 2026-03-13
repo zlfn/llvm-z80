@@ -92,16 +92,11 @@ MCFixupKindInfo Z80AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   llvm_unreachable("Invalid fixup kind!");
 }
 
-bool Z80AsmBackend::shouldForceRelocation(const MCFixup &Fixup,
-                                          const MCValue &Target) {
-  // Force relocations for external symbols
-  const MCSymbol *Sym = Target.getAddSym();
-  return Sym && Sym->isUndefined();
-}
-
 void Z80AsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                const MCValue &Target, uint8_t *Data,
                                uint64_t Value, bool IsResolved) {
+  maybeAddReloc(F, Fixup, Target, Value, IsResolved);
+
   unsigned Kind = Fixup.getKind();
   unsigned NumBytes = 0;
 

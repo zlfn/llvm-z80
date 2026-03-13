@@ -904,6 +904,121 @@ set(ve_SOURCES
 
 set(m68k_SOURCES ${GENERIC_SOURCES})
 
+# Z80/SM83 builtins — hand-written SDCC-dialect assembly (.asm files).
+# These cannot go through the standard add_compiler_rt_runtime() pipeline
+# because they require llvm-mc (ELF) or external sdasz80/sdasgb (SDCC).
+# Two output formats are built:
+#   ELF:  llvm-mc → .o → llvm-ar → .a  (for lld)
+#   SDCC: sdasz80 → .rel → sdar → .lib (for sdldz80, optional)
+
+function(z80_build_builtins TRIPLE SUBDIR CRT0_ASM RT_DIR SDAS)
+  set(OUT ${LLVM_LIBRARY_OUTPUT_INTDIR}/${SUBDIR})
+  set(LLVM_MC $<TARGET_FILE:llvm-mc>)
+  set(LLVM_AR $<TARGET_FILE:llvm-ar>)
+
+  # --- ELF format (always built, uses llvm-mc from the build tree) ---
+  add_custom_command(
+    OUTPUT ${OUT}/${SUBDIR}_crt0.o
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}
+    COMMAND ${LLVM_MC} -triple=${TRIPLE} -filetype=obj
+            ${CRT0_ASM} -o ${OUT}/${SUBDIR}_crt0.o
+    DEPENDS ${CRT0_ASM} llvm-mc
+    COMMENT "Assembling ${SUBDIR} crt0 (ELF)"
+  )
+  list(APPEND ALL_Z80_OUTPUTS ${OUT}/${SUBDIR}_crt0.o)
+
+  file(GLOB RT_SOURCES ${RT_DIR}/*.asm)
+  list(FILTER RT_SOURCES EXCLUDE REGEX "crt0\\.asm$")
+  set(RT_OBJS "")
+  foreach(src ${RT_SOURCES})
+    get_filename_component(name ${src} NAME_WE)
+    set(obj ${OUT}/${name}.o)
+    add_custom_command(
+      OUTPUT ${obj}
+      COMMAND ${LLVM_MC} -triple=${TRIPLE} -filetype=obj ${src} -o ${obj}
+      DEPENDS ${src} llvm-mc
+      COMMENT "Assembling ${SUBDIR} runtime: ${name}.asm (ELF)"
+    )
+    list(APPEND RT_OBJS ${obj})
+  endforeach()
+  add_custom_command(
+    OUTPUT ${OUT}/${SUBDIR}_rt.a
+    COMMAND ${LLVM_AR} rcs ${OUT}/${SUBDIR}_rt.a ${RT_OBJS}
+    DEPENDS ${RT_OBJS} llvm-ar
+    COMMENT "Creating ${SUBDIR} runtime archive (ELF)"
+  )
+  list(APPEND ALL_Z80_OUTPUTS ${OUT}/${SUBDIR}_rt.a)
+
+  # Copy linker script
+  set(LDSCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/z80/z80.ld)
+  add_custom_command(
+    OUTPUT ${OUT}/z80.ld
+    COMMAND ${CMAKE_COMMAND} -E copy ${LDSCRIPT} ${OUT}/z80.ld
+    DEPENDS ${LDSCRIPT}
+    COMMENT "Copying ${SUBDIR} linker script"
+  )
+  list(APPEND ALL_Z80_OUTPUTS ${OUT}/z80.ld)
+
+  install(FILES ${OUT}/${SUBDIR}_crt0.o ${OUT}/${SUBDIR}_rt.a ${OUT}/z80.ld
+          DESTINATION lib/${SUBDIR} COMPONENT Z80Runtime)
+
+  # --- SDCC format (optional, built if external assembler is found) ---
+  find_program(SDAS_${TRIPLE} ${SDAS})
+  find_program(SDAR sdar)
+  set(SDAS_PROG ${SDAS_${TRIPLE}})
+  if(SDAS_PROG AND SDAR)
+    add_custom_command(
+      OUTPUT ${OUT}/${SUBDIR}_crt0.rel
+      COMMAND ${SDAS_PROG} -g -o ${OUT}/${SUBDIR}_crt0.rel ${CRT0_ASM}
+      DEPENDS ${CRT0_ASM}
+      COMMENT "Assembling ${SUBDIR} crt0 (SDCC)"
+    )
+    list(APPEND ALL_Z80_OUTPUTS ${OUT}/${SUBDIR}_crt0.rel)
+
+    set(RT_RELS "")
+    foreach(src ${RT_SOURCES})
+      get_filename_component(name ${src} NAME_WE)
+      set(rel ${OUT}/${name}.rel)
+      add_custom_command(
+        OUTPUT ${rel}
+        COMMAND ${SDAS_PROG} -g -o ${rel} ${src}
+        DEPENDS ${src}
+        COMMENT "Assembling ${SUBDIR} runtime: ${name}.asm (SDCC)"
+      )
+      list(APPEND RT_RELS ${rel})
+    endforeach()
+    add_custom_command(
+      OUTPUT ${OUT}/${SUBDIR}_rt.lib
+      COMMAND ${SDAR} rs ${OUT}/${SUBDIR}_rt.lib ${RT_RELS}
+      DEPENDS ${RT_RELS}
+      COMMENT "Creating ${SUBDIR} runtime archive (SDCC)"
+    )
+    list(APPEND ALL_Z80_OUTPUTS ${OUT}/${SUBDIR}_rt.lib)
+
+    install(FILES ${OUT}/${SUBDIR}_crt0.rel ${OUT}/${SUBDIR}_rt.lib
+            DESTINATION lib/${SUBDIR} COMPONENT Z80Runtime)
+  endif()
+
+  set(ALL_Z80_OUTPUTS ${ALL_Z80_OUTPUTS} PARENT_SCOPE)
+endfunction()
+
+if("z80" IN_LIST BUILTIN_SUPPORTED_ARCH OR "sm83" IN_LIST BUILTIN_SUPPORTED_ARCH)
+  z80_build_builtins(z80 z80
+    ${CMAKE_CURRENT_SOURCE_DIR}/z80/crt0.asm
+    ${CMAKE_CURRENT_SOURCE_DIR}/z80
+    sdasz80)
+
+  z80_build_builtins(sm83 sm83
+    ${CMAKE_CURRENT_SOURCE_DIR}/sm83/crt0.asm
+    ${CMAKE_CURRENT_SOURCE_DIR}/sm83
+    sdasgb)
+
+  if(ALL_Z80_OUTPUTS)
+    add_custom_target(z80-builtins ALL DEPENDS ${ALL_Z80_OUTPUTS})
+    set_target_properties(z80-builtins PROPERTIES FOLDER "Compiler-RT/Metatargets")
+  endif()
+endif()
+
 add_custom_target(builtins)
 set_target_properties(builtins PROPERTIES FOLDER "Compiler-RT/Metatargets")
 
@@ -1058,6 +1173,9 @@ else ()
   endforeach ()
 endif ()
 
+if(TARGET z80-builtins)
+  add_dependencies(builtins z80-builtins)
+endif()
 add_dependencies(compiler-rt builtins)
 
 option(COMPILER_RT_BUILD_STANDALONE_LIBATOMIC

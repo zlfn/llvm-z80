@@ -98,6 +98,8 @@ void Z80AsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   // For PC-relative fixups, LLVM computes Value = target - fixup_byte_addr.
   // Z80 JR displacement is relative to the end of the instruction (PC+2),
   // but the fixup byte is at PC+1, so we need to subtract 1.
+  // Note: lld applies the same -1 adjustment in Z80::relocate() for
+  // link-time relocations; this adjustment handles resolved (internal) fixups.
   if (Fixup.isPCRel())
     Value -= 1;
 

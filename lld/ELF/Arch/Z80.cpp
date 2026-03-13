@@ -80,14 +80,16 @@ void Z80::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     *loc = val >> 8;
     break;
   case R_Z80_PCREL_8: {
-    int64_t offset = (int64_t)val;
+    // Z80 JR displacement: target = PC_after_instr + d = (loc + 1) + d
+    // lld computes val = S + A - P where P = loc, so d = val - 1
+    int64_t offset = (int64_t)val - 1;
     checkInt(ctx, loc, offset, 8, rel);
     *loc = offset;
     break;
   }
   case R_Z80_PCREL_16:
-    checkInt(ctx, loc, (int64_t)val, 16, rel);
-    write16le(loc, val);
+    checkInt(ctx, loc, (int64_t)val - 1, 16, rel);
+    write16le(loc, val - 1);
     break;
   case R_Z80_ADDR24: {
     checkIntUInt(ctx, loc, val, 24, rel);

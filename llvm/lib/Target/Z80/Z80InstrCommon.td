@@ -460,13 +460,111 @@ let mayLoad = true, mayStore = false, hasSideEffects = false in
 def BIT_7_HLind : InstCB<"bit 7,(hl)", 0x7E>;
 } // Defs = [FLAGS]
 
-// RES b,r - Reset bit (selected examples, full set would be 64 instructions)
+// RES b,r - Reset bit
+def RES_0_B : RESbr<0, REG_B>;  def RES_0_C : RESbr<0, REG_C>;
+def RES_0_D : RESbr<0, REG_D>;  def RES_0_E : RESbr<0, REG_E>;
+def RES_0_H : RESbr<0, REG_H>;  def RES_0_L : RESbr<0, REG_L>;
 def RES_0_A : RESbr<0, REG_A>;
+
+def RES_1_B : RESbr<1, REG_B>;  def RES_1_C : RESbr<1, REG_C>;
+def RES_1_D : RESbr<1, REG_D>;  def RES_1_E : RESbr<1, REG_E>;
+def RES_1_H : RESbr<1, REG_H>;  def RES_1_L : RESbr<1, REG_L>;
+def RES_1_A : RESbr<1, REG_A>;
+
+def RES_2_B : RESbr<2, REG_B>;  def RES_2_C : RESbr<2, REG_C>;
+def RES_2_D : RESbr<2, REG_D>;  def RES_2_E : RESbr<2, REG_E>;
+def RES_2_H : RESbr<2, REG_H>;  def RES_2_L : RESbr<2, REG_L>;
+def RES_2_A : RESbr<2, REG_A>;
+
+def RES_3_B : RESbr<3, REG_B>;  def RES_3_C : RESbr<3, REG_C>;
+def RES_3_D : RESbr<3, REG_D>;  def RES_3_E : RESbr<3, REG_E>;
+def RES_3_H : RESbr<3, REG_H>;  def RES_3_L : RESbr<3, REG_L>;
+def RES_3_A : RESbr<3, REG_A>;
+
+def RES_4_B : RESbr<4, REG_B>;  def RES_4_C : RESbr<4, REG_C>;
+def RES_4_D : RESbr<4, REG_D>;  def RES_4_E : RESbr<4, REG_E>;
+def RES_4_H : RESbr<4, REG_H>;  def RES_4_L : RESbr<4, REG_L>;
+def RES_4_A : RESbr<4, REG_A>;
+
+def RES_5_B : RESbr<5, REG_B>;  def RES_5_C : RESbr<5, REG_C>;
+def RES_5_D : RESbr<5, REG_D>;  def RES_5_E : RESbr<5, REG_E>;
+def RES_5_H : RESbr<5, REG_H>;  def RES_5_L : RESbr<5, REG_L>;
+def RES_5_A : RESbr<5, REG_A>;
+
+def RES_6_B : RESbr<6, REG_B>;  def RES_6_C : RESbr<6, REG_C>;
+def RES_6_D : RESbr<6, REG_D>;  def RES_6_E : RESbr<6, REG_E>;
+def RES_6_H : RESbr<6, REG_H>;  def RES_6_L : RESbr<6, REG_L>;
+def RES_6_A : RESbr<6, REG_A>;
+
+def RES_7_B : RESbr<7, REG_B>;  def RES_7_C : RESbr<7, REG_C>;
+def RES_7_D : RESbr<7, REG_D>;  def RES_7_E : RESbr<7, REG_E>;
+def RES_7_H : RESbr<7, REG_H>;  def RES_7_L : RESbr<7, REG_L>;
 def RES_7_A : RESbr<7, REG_A>;
 
-// SET b,r - Set bit (selected examples)
+// RES b,(HL) - Reset bit in memory
+let mayLoad = true, mayStore = true, hasSideEffects = false in {
+def RES_0_HLind : InstCB<"res 0,(hl)", 0x86> { let Uses = [HL]; }
+def RES_1_HLind : InstCB<"res 1,(hl)", 0x8E> { let Uses = [HL]; }
+def RES_2_HLind : InstCB<"res 2,(hl)", 0x96> { let Uses = [HL]; }
+def RES_3_HLind : InstCB<"res 3,(hl)", 0x9E> { let Uses = [HL]; }
+def RES_4_HLind : InstCB<"res 4,(hl)", 0xA6> { let Uses = [HL]; }
+def RES_5_HLind : InstCB<"res 5,(hl)", 0xAE> { let Uses = [HL]; }
+def RES_6_HLind : InstCB<"res 6,(hl)", 0xB6> { let Uses = [HL]; }
+def RES_7_HLind : InstCB<"res 7,(hl)", 0xBE> { let Uses = [HL]; }
+}
+
+// SET b,r - Set bit
+def SET_0_B : SETbr<0, REG_B>;  def SET_0_C : SETbr<0, REG_C>;
+def SET_0_D : SETbr<0, REG_D>;  def SET_0_E : SETbr<0, REG_E>;
+def SET_0_H : SETbr<0, REG_H>;  def SET_0_L : SETbr<0, REG_L>;
 def SET_0_A : SETbr<0, REG_A>;
+
+def SET_1_B : SETbr<1, REG_B>;  def SET_1_C : SETbr<1, REG_C>;
+def SET_1_D : SETbr<1, REG_D>;  def SET_1_E : SETbr<1, REG_E>;
+def SET_1_H : SETbr<1, REG_H>;  def SET_1_L : SETbr<1, REG_L>;
+def SET_1_A : SETbr<1, REG_A>;
+
+def SET_2_B : SETbr<2, REG_B>;  def SET_2_C : SETbr<2, REG_C>;
+def SET_2_D : SETbr<2, REG_D>;  def SET_2_E : SETbr<2, REG_E>;
+def SET_2_H : SETbr<2, REG_H>;  def SET_2_L : SETbr<2, REG_L>;
+def SET_2_A : SETbr<2, REG_A>;
+
+def SET_3_B : SETbr<3, REG_B>;  def SET_3_C : SETbr<3, REG_C>;
+def SET_3_D : SETbr<3, REG_D>;  def SET_3_E : SETbr<3, REG_E>;
+def SET_3_H : SETbr<3, REG_H>;  def SET_3_L : SETbr<3, REG_L>;
+def SET_3_A : SETbr<3, REG_A>;
+
+def SET_4_B : SETbr<4, REG_B>;  def SET_4_C : SETbr<4, REG_C>;
+def SET_4_D : SETbr<4, REG_D>;  def SET_4_E : SETbr<4, REG_E>;
+def SET_4_H : SETbr<4, REG_H>;  def SET_4_L : SETbr<4, REG_L>;
+def SET_4_A : SETbr<4, REG_A>;
+
+def SET_5_B : SETbr<5, REG_B>;  def SET_5_C : SETbr<5, REG_C>;
+def SET_5_D : SETbr<5, REG_D>;  def SET_5_E : SETbr<5, REG_E>;
+def SET_5_H : SETbr<5, REG_H>;  def SET_5_L : SETbr<5, REG_L>;
+def SET_5_A : SETbr<5, REG_A>;
+
+def SET_6_B : SETbr<6, REG_B>;  def SET_6_C : SETbr<6, REG_C>;
+def SET_6_D : SETbr<6, REG_D>;  def SET_6_E : SETbr<6, REG_E>;
+def SET_6_H : SETbr<6, REG_H>;  def SET_6_L : SETbr<6, REG_L>;
+def SET_6_A : SETbr<6, REG_A>;
+
+def SET_7_B : SETbr<7, REG_B>;  def SET_7_C : SETbr<7, REG_C>;
+def SET_7_D : SETbr<7, REG_D>;  def SET_7_E : SETbr<7, REG_E>;
+def SET_7_H : SETbr<7, REG_H>;  def SET_7_L : SETbr<7, REG_L>;
 def SET_7_A : SETbr<7, REG_A>;
+
+// SET b,(HL) - Set bit in memory
+let mayLoad = true, mayStore = true, hasSideEffects = false in {
+def SET_0_HLind : InstCB<"set 0,(hl)", 0xC6> { let Uses = [HL]; }
+def SET_1_HLind : InstCB<"set 1,(hl)", 0xCE> { let Uses = [HL]; }
+def SET_2_HLind : InstCB<"set 2,(hl)", 0xD6> { let Uses = [HL]; }
+def SET_3_HLind : InstCB<"set 3,(hl)", 0xDE> { let Uses = [HL]; }
+def SET_4_HLind : InstCB<"set 4,(hl)", 0xE6> { let Uses = [HL]; }
+def SET_5_HLind : InstCB<"set 5,(hl)", 0xEE> { let Uses = [HL]; }
+def SET_6_HLind : InstCB<"set 6,(hl)", 0xF6> { let Uses = [HL]; }
+def SET_7_HLind : InstCB<"set 7,(hl)", 0xFE> { let Uses = [HL]; }
+}
 
 //===----------------------------------------------------------------------===//
 //  Jump Group (common subset: NZ/Z/NC/C conditions only)

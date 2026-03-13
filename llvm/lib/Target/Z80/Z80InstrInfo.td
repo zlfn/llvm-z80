@@ -371,6 +371,183 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 0 in {
   def SBC_A_IXd : InstDD16<"sbc a,", 0x9E, IndexedIXMode> {
     let Uses = [A, IX, FLAGS]; let Defs = [A, FLAGS];
   }
+  def AND_IXd : InstDD16<"and", 0xA6, IndexedIXMode> {
+    let AsmString = "and ( ix + $imm )";
+    let Uses = [A, IX]; let Defs = [A, FLAGS];
+  }
+  def XOR_IXd : InstDD16<"xor", 0xAE, IndexedIXMode> {
+    let AsmString = "xor ( ix + $imm )";
+    let Uses = [A, IX]; let Defs = [A, FLAGS];
+  }
+  def OR_IXd : InstDD16<"or", 0xB6, IndexedIXMode> {
+    let AsmString = "or ( ix + $imm )";
+    let Uses = [A, IX]; let Defs = [A, FLAGS];
+  }
+  def CP_IXd : InstDD16<"cp", 0xBE, IndexedIXMode> {
+    let AsmString = "cp ( ix + $imm )";
+    let Uses = [A, IX]; let Defs = [FLAGS];
+  }
+}
+
+//===----------------------------------------------------------------------===//
+//  IY-indexed ALU instructions (FD prefix)
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, mayStore = 0, hasSideEffects = 0 in {
+  def ADD_A_IYd : InstFD16<"add a,", 0x86, IndexedIYMode> {
+    let Uses = [A, IY]; let Defs = [A, FLAGS];
+  }
+  def ADC_A_IYd : InstFD16<"adc a,", 0x8E, IndexedIYMode> {
+    let Uses = [A, IY, FLAGS]; let Defs = [A, FLAGS];
+  }
+  def SUB_IYd : InstFD16<"sub", 0x96, IndexedIYMode> {
+    let AsmString = "sub ( iy + $imm )";
+    let Uses = [A, IY]; let Defs = [A, FLAGS];
+  }
+  def SBC_A_IYd : InstFD16<"sbc a,", 0x9E, IndexedIYMode> {
+    let Uses = [A, IY, FLAGS]; let Defs = [A, FLAGS];
+  }
+  def AND_IYd : InstFD16<"and", 0xA6, IndexedIYMode> {
+    let AsmString = "and ( iy + $imm )";
+    let Uses = [A, IY]; let Defs = [A, FLAGS];
+  }
+  def XOR_IYd : InstFD16<"xor", 0xAE, IndexedIYMode> {
+    let AsmString = "xor ( iy + $imm )";
+    let Uses = [A, IY]; let Defs = [A, FLAGS];
+  }
+  def OR_IYd : InstFD16<"or", 0xB6, IndexedIYMode> {
+    let AsmString = "or ( iy + $imm )";
+    let Uses = [A, IY]; let Defs = [A, FLAGS];
+  }
+  def CP_IYd : InstFD16<"cp", 0xBE, IndexedIYMode> {
+    let AsmString = "cp ( iy + $imm )";
+    let Uses = [A, IY]; let Defs = [FLAGS];
+  }
+}
+
+//===----------------------------------------------------------------------===//
+//  IX/IY-indexed INC/DEC (DD/FD prefix)
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def INC_IXd : InstDD16<"inc", 0x34, IndexedIXMode> {
+    let AsmString = "inc ( ix + $imm )";
+    let Uses = [IX]; let Defs = [FLAGS];
+  }
+  def DEC_IXd : InstDD16<"dec", 0x35, IndexedIXMode> {
+    let AsmString = "dec ( ix + $imm )";
+    let Uses = [IX]; let Defs = [FLAGS];
+  }
+  def INC_IYd : InstFD16<"inc", 0x34, IndexedIYMode> {
+    let AsmString = "inc ( iy + $imm )";
+    let Uses = [IY]; let Defs = [FLAGS];
+  }
+  def DEC_IYd : InstFD16<"dec", 0x35, IndexedIYMode> {
+    let AsmString = "dec ( iy + $imm )";
+    let Uses = [IY]; let Defs = [FLAGS];
+  }
+}
+
+//===----------------------------------------------------------------------===//
+//  DDCB/FDCB indexed rotate/shift instructions (4-byte)
+//===----------------------------------------------------------------------===//
+
+// Rotate/shift (IX+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def RLC_IXd : InstDDCB<"rlc", 0x06> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def RRC_IXd : InstDDCB<"rrc", 0x0E> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def RL_IXd  : InstDDCB<"rl",  0x16> { let Uses = [IX, FLAGS]; let Defs = [FLAGS]; }
+  def RR_IXd  : InstDDCB<"rr",  0x1E> { let Uses = [IX, FLAGS]; let Defs = [FLAGS]; }
+  def SLA_IXd : InstDDCB<"sla", 0x26> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def SRA_IXd : InstDDCB<"sra", 0x2E> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def SRL_IXd : InstDDCB<"srl", 0x3E> { let Uses = [IX]; let Defs = [FLAGS]; }
+}
+
+// Rotate/shift (IY+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def RLC_IYd : InstFDCB<"rlc", 0x06> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def RRC_IYd : InstFDCB<"rrc", 0x0E> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def RL_IYd  : InstFDCB<"rl",  0x16> { let Uses = [IY, FLAGS]; let Defs = [FLAGS]; }
+  def RR_IYd  : InstFDCB<"rr",  0x1E> { let Uses = [IY, FLAGS]; let Defs = [FLAGS]; }
+  def SLA_IYd : InstFDCB<"sla", 0x26> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def SRA_IYd : InstFDCB<"sra", 0x2E> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def SRL_IYd : InstFDCB<"srl", 0x3E> { let Uses = [IY]; let Defs = [FLAGS]; }
+}
+
+//===----------------------------------------------------------------------===//
+//  DDCB/FDCB indexed BIT/SET/RES instructions (4-byte)
+//===----------------------------------------------------------------------===//
+
+// BIT b,(IX+d) — read memory only
+let mayLoad = 1, mayStore = 0, hasSideEffects = 0 in {
+  def BIT_0_IXd : InstDDCB<"bit 0,", 0x46> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_1_IXd : InstDDCB<"bit 1,", 0x4E> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_2_IXd : InstDDCB<"bit 2,", 0x56> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_3_IXd : InstDDCB<"bit 3,", 0x5E> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_4_IXd : InstDDCB<"bit 4,", 0x66> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_5_IXd : InstDDCB<"bit 5,", 0x6E> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_6_IXd : InstDDCB<"bit 6,", 0x76> { let Uses = [IX]; let Defs = [FLAGS]; }
+  def BIT_7_IXd : InstDDCB<"bit 7,", 0x7E> { let Uses = [IX]; let Defs = [FLAGS]; }
+}
+
+// BIT b,(IY+d) — read memory only
+let mayLoad = 1, mayStore = 0, hasSideEffects = 0 in {
+  def BIT_0_IYd : InstFDCB<"bit 0,", 0x46> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_1_IYd : InstFDCB<"bit 1,", 0x4E> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_2_IYd : InstFDCB<"bit 2,", 0x56> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_3_IYd : InstFDCB<"bit 3,", 0x5E> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_4_IYd : InstFDCB<"bit 4,", 0x66> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_5_IYd : InstFDCB<"bit 5,", 0x6E> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_6_IYd : InstFDCB<"bit 6,", 0x76> { let Uses = [IY]; let Defs = [FLAGS]; }
+  def BIT_7_IYd : InstFDCB<"bit 7,", 0x7E> { let Uses = [IY]; let Defs = [FLAGS]; }
+}
+
+// RES b,(IX+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def RES_0_IXd : InstDDCB<"res 0,", 0x86> { let Uses = [IX]; }
+  def RES_1_IXd : InstDDCB<"res 1,", 0x8E> { let Uses = [IX]; }
+  def RES_2_IXd : InstDDCB<"res 2,", 0x96> { let Uses = [IX]; }
+  def RES_3_IXd : InstDDCB<"res 3,", 0x9E> { let Uses = [IX]; }
+  def RES_4_IXd : InstDDCB<"res 4,", 0xA6> { let Uses = [IX]; }
+  def RES_5_IXd : InstDDCB<"res 5,", 0xAE> { let Uses = [IX]; }
+  def RES_6_IXd : InstDDCB<"res 6,", 0xB6> { let Uses = [IX]; }
+  def RES_7_IXd : InstDDCB<"res 7,", 0xBE> { let Uses = [IX]; }
+}
+
+// RES b,(IY+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def RES_0_IYd : InstFDCB<"res 0,", 0x86> { let Uses = [IY]; }
+  def RES_1_IYd : InstFDCB<"res 1,", 0x8E> { let Uses = [IY]; }
+  def RES_2_IYd : InstFDCB<"res 2,", 0x96> { let Uses = [IY]; }
+  def RES_3_IYd : InstFDCB<"res 3,", 0x9E> { let Uses = [IY]; }
+  def RES_4_IYd : InstFDCB<"res 4,", 0xA6> { let Uses = [IY]; }
+  def RES_5_IYd : InstFDCB<"res 5,", 0xAE> { let Uses = [IY]; }
+  def RES_6_IYd : InstFDCB<"res 6,", 0xB6> { let Uses = [IY]; }
+  def RES_7_IYd : InstFDCB<"res 7,", 0xBE> { let Uses = [IY]; }
+}
+
+// SET b,(IX+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def SET_0_IXd : InstDDCB<"set 0,", 0xC6> { let Uses = [IX]; }
+  def SET_1_IXd : InstDDCB<"set 1,", 0xCE> { let Uses = [IX]; }
+  def SET_2_IXd : InstDDCB<"set 2,", 0xD6> { let Uses = [IX]; }
+  def SET_3_IXd : InstDDCB<"set 3,", 0xDE> { let Uses = [IX]; }
+  def SET_4_IXd : InstDDCB<"set 4,", 0xE6> { let Uses = [IX]; }
+  def SET_5_IXd : InstDDCB<"set 5,", 0xEE> { let Uses = [IX]; }
+  def SET_6_IXd : InstDDCB<"set 6,", 0xF6> { let Uses = [IX]; }
+  def SET_7_IXd : InstDDCB<"set 7,", 0xFE> { let Uses = [IX]; }
+}
+
+// SET b,(IY+d) — read and write memory
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in {
+  def SET_0_IYd : InstFDCB<"set 0,", 0xC6> { let Uses = [IY]; }
+  def SET_1_IYd : InstFDCB<"set 1,", 0xCE> { let Uses = [IY]; }
+  def SET_2_IYd : InstFDCB<"set 2,", 0xD6> { let Uses = [IY]; }
+  def SET_3_IYd : InstFDCB<"set 3,", 0xDE> { let Uses = [IY]; }
+  def SET_4_IYd : InstFDCB<"set 4,", 0xE6> { let Uses = [IY]; }
+  def SET_5_IYd : InstFDCB<"set 5,", 0xEE> { let Uses = [IY]; }
+  def SET_6_IYd : InstFDCB<"set 6,", 0xF6> { let Uses = [IY]; }
+  def SET_7_IYd : InstFDCB<"set 7,", 0xFE> { let Uses = [IY]; }
 }
 
 } // Predicates = [HasZ80]

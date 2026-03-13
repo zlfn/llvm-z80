@@ -63,3 +63,6 @@ ELF_RELOC(R_Z80_IMM16,                 16)
 
 // A 13-bit address.  Reserved for future use.
 ELF_RELOC(R_Z80_ADDR13,                17)
+
+// An 8-bit signed displacement for indexed addressing (IX+d, IY+d).
+ELF_RELOC(R_Z80_DISP8,                 18)

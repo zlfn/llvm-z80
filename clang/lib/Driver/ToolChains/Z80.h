@@ -17,6 +17,8 @@ namespace driver {
 namespace tools {
 namespace z80 {
 
+/// SDCC external assembler (sdasz80 / sdasgb).
+/// Used when -fno-integrated-as is specified.
 class LLVM_LIBRARY_VISIBILITY Assembler final : public Tool {
 public:
   Assembler(const ToolChain &TC) : Tool("z80::Assembler", "sdasz80", TC) {}
@@ -28,9 +30,26 @@ public:
                     const char *LinkingOutput) const override;
 };
 
+/// SDCC linker (sdldz80 / sdldgb).
+/// Used when -fno-integrated-as is specified (SDCC .rel object format).
+class LLVM_LIBRARY_VISIBILITY SDCCLinker final : public Tool {
+public:
+  SDCCLinker(const ToolChain &TC)
+      : Tool("z80::SDCCLinker", "sdldz80", TC) {}
+
+  bool hasIntegratedCPP() const override { return false; }
+  bool isLinkJob() const override { return true; }
+  void ConstructJob(Compilation &C, const JobAction &JA,
+                    const InputInfo &Output, const InputInfoList &Inputs,
+                    const llvm::opt::ArgList &TCArgs,
+                    const char *LinkingOutput) const override;
+};
+
+/// ELF linker (ld.lld).
+/// Default linker when using the integrated assembler.
 class LLVM_LIBRARY_VISIBILITY Linker final : public Tool {
 public:
-  Linker(const ToolChain &TC) : Tool("z80::Linker", "sdldz80", TC) {}
+  Linker(const ToolChain &TC) : Tool("z80::Linker", "ld.lld", TC) {}
 
   bool hasIntegratedCPP() const override { return false; }
   bool isLinkJob() const override { return true; }
@@ -55,7 +74,9 @@ protected:
   Tool *buildLinker() const override;
 
 public:
-  bool IsIntegratedAssemblerDefault() const override { return false; }
+  bool IsIntegratedAssemblerDefault() const override {
+    return getTriple().getEnvironment() != llvm::Triple::SDCC;
+  }
   bool isPICDefault() const override { return false; }
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
     return false;

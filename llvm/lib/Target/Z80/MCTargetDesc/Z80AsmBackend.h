@@ -16,11 +16,8 @@
 
 #include "MCTargetDesc/Z80FixupKinds.h"
 
-#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
-#include "llvm/MC/MCSectionELF.h"
 #include "llvm/TargetParser/Triple.h"
 
 namespace llvm {
@@ -29,21 +26,6 @@ class MCAssembler;
 class Target;
 
 struct MCFixupKindInfo;
-
-class Z80ObjectTargetWriter : public MCELFObjectTargetWriter {
-public:
-  Z80ObjectTargetWriter()
-      : MCELFObjectTargetWriter(false, 0, ELF::EM_Z80, false) {}
-
-  unsigned getRelocType(const MCFixup &Fixup, const MCValue &Target,
-                        bool IsPCRel) const override {
-    return 0;
-  }
-
-  Triple::ObjectFormatType getFormat() const override {
-    return Triple::ObjectFormatType::ELF;
-  }
-};
 
 /// Utilities for manipulating generated Z80 machine code.
 class Z80AsmBackend : public MCAsmBackend {
@@ -61,8 +43,6 @@ public:
                                     const MCValue &Target, uint64_t Value,
                                     bool Resolved) const override;
   MCFixupKindInfo getFixupKindInfo(MCFixupKind Kind) const override;
-
-  bool shouldForceRelocation(const MCFixup &, const MCValue &);
 
   /// Apply the \p Value for given \p Fixup into the provided data fragment, at
   /// the offset specified by the fixup and following the fixup kind as

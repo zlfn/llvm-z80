@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-let Predicates = [HasSM83] in {
+let Predicates = [HasSM83], DecoderNamespace = "SM83" in {
 
 //===----------------------------------------------------------------------===//
 //  Hardware Instructions
@@ -28,29 +28,42 @@ def SWAP_A : InstCB<"swap a", 0x37> {
 // SM83 RETI - Return from interrupt (opcode 0xD9)
 // Unlike Z80 RETI (ED 4D), SM83 RETI is a single-byte instruction
 // that atomically enables interrupts (IME=1) and returns.
-// isCodeGenOnly: 0xD9 is EXX on Z80, so exclude from shared disassembler tables.
-let isCodeGenOnly = 1 in
+// No conflict: SM83 DecoderNamespace separates from Z80's EXX (also 0xD9).
 def SM83_RETI : Inst8<"reti", 0xD9>, InstReturn;
 
 // LDHL SP,e - Load SP + signed 8-bit offset into HL (opcode 0xF8)
 // sdasgb syntax: ldhl sp,#imm
-def LDHL_SP_e : Inst16Imm<"ldhl sp,", 0xF8> {
+def LDHL_SP_e : Inst16SImm<"ldhl sp,", 0xF8> {
   let Uses = [SP];
   let Defs = [HL, FLAGS];
 }
 
 // ADD SP,e - Add signed 8-bit immediate to SP (opcode 0xE8)
 // sdasgb syntax: add sp,#imm
-def ADD_SP_e : Inst16Imm<"add sp,", 0xE8> {
+def ADD_SP_e : Inst16SImm<"add sp,", 0xE8> {
   let Uses = [SP];
   let Defs = [SP, FLAGS];
+}
+
+// LD (nn),A - Store A to direct address (opcode 0xEA)
+// Z80 uses 0x32 for this; SM83 0x32 is LD (HL-),A.
+let mayLoad = false, mayStore = true, hasSideEffects = false in
+def SM83_LD_nnind_A : Inst24<"ld", 0xEA, DirectMode> {
+  let AsmString = "ld ( $imm ),a";
+  let Uses = [A];
+}
+
+// LD A,(nn) - Load A from direct address (opcode 0xFA)
+// Z80 uses 0x3A for this; SM83 0x3A is LD A,(HL-).
+let mayLoad = true, mayStore = false, hasSideEffects = false in
+def SM83_LD_A_nnind : Inst24<"ld a,", 0xFA, DirectMode> {
+  let Defs = [A];
 }
 
 // LD (HL+),A - Store A to (HL) then increment HL (opcode 0x22)
 // Z80 uses 0x22 for LD (nn),HL.
 // sdasgb syntax: ld (hl+),a
-let isCodeGenOnly = 1 in {
-def LD_HLI_A : Inst8<"ld (hl+),a", 0x22> {
+def LD_HLI_A : Inst8<"ld (hl+), a", 0x22> {
   let Uses = [HL, A];
   let Defs = [HL];
   let mayLoad = false;
@@ -60,7 +73,7 @@ def LD_HLI_A : Inst8<"ld (hl+),a", 0x22> {
 // LD A,(HL+) - Load (HL) to A then increment HL (opcode 0x2A)
 // Z80 uses 0x2A for LD HL,(nn).
 // sdasgb syntax: ld a,(hl+)
-def LD_A_HLI : Inst8<"ld a,(hl+)", 0x2A> {
+def LD_A_HLI : Inst8<"ld a, (hl+)", 0x2A> {
   let Uses = [HL];
   let Defs = [A, HL];
   let mayLoad = true;
@@ -70,7 +83,7 @@ def LD_A_HLI : Inst8<"ld a,(hl+)", 0x2A> {
 // LD (HL-),A - Store A to (HL) then decrement HL (opcode 0x32)
 // Z80 uses 0x32 for LD (nn),A.
 // sdasgb syntax: ld (hl-),a
-def LD_HLD_A : Inst8<"ld (hl-),a", 0x32> {
+def LD_HLD_A : Inst8<"ld (hl-), a", 0x32> {
   let Uses = [HL, A];
   let Defs = [HL];
   let mayLoad = false;
@@ -80,13 +93,12 @@ def LD_HLD_A : Inst8<"ld (hl-),a", 0x32> {
 // LD A,(HL-) - Load (HL) to A then decrement HL (opcode 0x3A)
 // Z80 uses 0x3A for LD A,(nn).
 // sdasgb syntax: ld a,(hl-)
-def LD_A_HLD : Inst8<"ld a,(hl-)", 0x3A> {
+def LD_A_HLD : Inst8<"ld a, (hl-)", 0x3A> {
   let Uses = [HL];
   let Defs = [A, HL];
   let mayLoad = true;
   let mayStore = false;
 }
-} // isCodeGenOnly
 
 //===----------------------------------------------------------------------===//
 //  Pseudo Instructions

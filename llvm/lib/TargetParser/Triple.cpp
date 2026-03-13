@@ -425,6 +425,8 @@ StringRef Triple::getEnvironmentTypeName(EnvironmentType Kind) {
     return "llvm";
   case Mlibc:
     return "mlibc";
+  case SDCC:
+    return "sdcc";
   }
 
   llvm_unreachable("Invalid EnvironmentType!");
@@ -831,6 +833,7 @@ static Triple::EnvironmentType parseEnvironment(StringRef EnvironmentName) {
       .StartsWith("llvm", Triple::LLVM)
       .StartsWith("mlibc", Triple::Mlibc)
       .StartsWith("mtia", Triple::MTIA)
+      .StartsWith("sdcc", Triple::SDCC)
       .Default(Triple::UnknownEnvironment);
 }
 

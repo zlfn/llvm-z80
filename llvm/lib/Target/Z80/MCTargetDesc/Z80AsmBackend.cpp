@@ -92,16 +92,19 @@ MCFixupKindInfo Z80AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   llvm_unreachable("Invalid fixup kind!");
 }
 
-bool Z80AsmBackend::shouldForceRelocation(const MCFixup &Fixup,
-                                          const MCValue &Target) {
-  // Force relocations for external symbols
-  const MCSymbol *Sym = Target.getAddSym();
-  return Sym && Sym->isUndefined();
-}
-
 void Z80AsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                const MCValue &Target, uint8_t *Data,
                                uint64_t Value, bool IsResolved) {
+  // For PC-relative fixups, LLVM computes Value = target - fixup_byte_addr.
+  // Z80 JR displacement is relative to the end of the instruction (PC+2),
+  // but the fixup byte is at PC+1, so we need to subtract 1.
+  // Note: lld applies the same -1 adjustment in Z80::relocate() for
+  // link-time relocations; this adjustment handles resolved (internal) fixups.
+  if (Fixup.isPCRel())
+    Value -= 1;
+
+  maybeAddReloc(F, Fixup, Target, Value, IsResolved);
+
   unsigned Kind = Fixup.getKind();
   unsigned NumBytes = 0;
 

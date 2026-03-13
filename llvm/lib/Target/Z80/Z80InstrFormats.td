@@ -118,6 +118,17 @@ class addr16at<int offset> : Operand<i32> {
 def addr16 : addr16at<1>;
 def addr16at2 : addr16at<2>;
 
+/// 8-bit signed immediate operand (for SM83 ADD SP,e / LDHL SP,e)
+class simm8at<int offset> : Operand<i32> {
+  let ParserMatchClass = ImmediateAsmOperand<"Imm8">;
+  let EncoderMethod = "encodeImm<Z80::Imm8, " # offset # ">";
+  let DecoderMethod = "decodeSImmOperand<8>";
+  let OperandType = "OPERAND_IMM8";
+  let OperandNamespace = "Z80Op";
+  let Type = i8;
+}
+def simm8 : simm8at<1>;
+
 /// 8-bit signed displacement for indexed addressing (IX+d, IY+d)
 class disp8at<int offset> : Operand<i32> {
   let ParserMatchClass = ImmediateAsmOperand<"Disp8">;
@@ -252,6 +263,18 @@ class Inst16Imm<string asmstr, bits<8> opcode> : Z80Inst<asmstr> {
   let Inst{7-0} = opcode;
   let Inst{15-8} = imm;
   let InOperandList = (ins imm8:$imm);
+  let AsmString = asmstr # " $imm";
+}
+
+/// 2-byte unprefixed instruction with signed 8-bit immediate
+/// Used for SM83 LDHL SP,e and ADD SP,e which take signed offsets.
+class Inst16SImm<string asmstr, bits<8> opcode> : Z80Inst<asmstr> {
+  let Size = 2;
+  bits<8> imm;
+  bits<16> Inst;
+  let Inst{7-0} = opcode;
+  let Inst{15-8} = imm;
+  let InOperandList = (ins simm8:$imm);
   let AsmString = asmstr # " $imm";
 }
 

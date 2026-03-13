@@ -100,6 +100,8 @@ unsigned Z80ELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_Z80_IMM16;
   case Z80::Addr13:
     return ELF::R_Z80_ADDR13;
+  case Z80::Disp8:
+    return ELF::R_Z80_DISP8;
 
   default:
     llvm_unreachable("invalid fixup kind!");

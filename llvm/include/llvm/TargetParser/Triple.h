@@ -323,7 +323,8 @@ public:
 
     PAuthTest,
     MTIA,
-    LastEnvironmentType = MTIA
+    SDCC,
+    LastEnvironmentType = SDCC
   };
   enum ObjectFormatType {
     UnknownObjectFormat,

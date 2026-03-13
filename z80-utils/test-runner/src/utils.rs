@@ -484,24 +484,17 @@ fn run_ihx_binary(ihx: &Path, source: &str, target: Target, tag: &str) -> TestRe
 }
 
 fn clang_to_rel(
-    clang: &Path, src: &Path, asm_out: &Path, rel_out: &Path, target: Target, opt: OptLevel, _tag: &str,
+    clang: &Path, src: &Path, _asm_out: &Path, rel_out: &Path, target: Target, opt: OptLevel, _tag: &str,
 ) -> Result<(), String> {
     let mut cmd = Command::new(clang);
-    cmd.arg(format!("--target={}", target.triple()));
+    cmd.arg(format!("--target={}", target.sdcc_triple()));
     cmd.arg(format!("-{}", opt.clang_flag()));
-    cmd.args(["-S", "-fno-integrated-as"]);
-    cmd.arg(src).arg("-o").arg(asm_out);
+    cmd.arg("-c");
+    cmd.arg(src).arg("-o").arg(rel_out);
     match run_cmd_timeout(&mut cmd, COMPILE_TIMEOUT) {
-        Err(e) => return Err(format!("clang -S: {e}")),
+        Err(e) => return Err(format!("clang -c: {e}")),
         Ok((code, _, stderr)) if code != 0 => return Err(extract_error(&stderr)),
         _ => {}
-    }
-    let status = Command::new(target.assembler())
-        .args(["-g", "-o"]).arg(rel_out).arg(asm_out)
-        .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
-        .status();
-    if !status.is_ok_and(|s| s.success()) {
-        return Err("assembler failed".into());
     }
     Ok(())
 }
@@ -610,7 +603,7 @@ fn run_group_rel_roundtrip(
         }
 
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
-        if let Some(reason) = check_skip_c(&source, target, &[]) {
+        if let Some(reason) = check_skip_c(&source, target, &["-fno-integrated-as"]) {
             let tag = format!("{name}_rel_rt");
             result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
             continue;
@@ -1035,7 +1028,7 @@ fn run_group_rel_ar_roundtrip(
         }
 
         let source = std::fs::read_to_string(test_file).unwrap_or_default();
-        if let Some(reason) = check_skip_c(&source, target, &[]) {
+        if let Some(reason) = check_skip_c(&source, target, &["-fno-integrated-as"]) {
             let tag = format!("{name}_rel_ar");
             result.add(TestResult::skip(&tag, &reason), &mut cb, reg_name);
             continue;

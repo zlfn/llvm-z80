@@ -1,5 +1,6 @@
 /* Test 57: SM83 inline assembly */
 /* SKIP-IF: z80 */
+/* SKIP-IF: -fno-integrated-as */
 /* expect: 0x00FF */
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
@@ -107,12 +108,12 @@ uint8_t test_asm_call(void) {
     uint8_t result;
     asm volatile(
         "ld a, #0x00\n\t"
-        "call 100$\n\t"
-        "jr 101$\n\t"
-        "100$:\n\t"
+        "call 1f\n\t"
+        "jr 2f\n\t"
+        "1:\n\t"
         "ld a, #0x99\n\t"
         "ret\n\t"
-        "101$:\n\t"
+        "2:\n\t"
         : "=a"(result)
         :
         : "memory"

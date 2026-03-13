@@ -124,20 +124,19 @@ fn run_single(
         }
     }
 
-    // Step 2: Compile Clang source → .s → .rel
-    let clang_s = tmp_dir.join(format!("{tag}_clang.s"));
+    // Step 2: Compile Clang source → .rel (via SDCC toolchain)
     let clang_rel = tmp_dir.join(format!("{tag}_clang.rel"));
     {
         let mut cmd = Command::new(clang.as_os_str());
-        cmd.arg(format!("--target={}", target.triple()));
-        cmd.args(["-S", "-fno-integrated-as"]);
+        cmd.arg(format!("--target={}", target.sdcc_triple()));
+        cmd.arg("-c");
         cmd.arg(format!("-{}", opt.clang_flag()));
         if config_omit_fp {
             cmd.arg("-fomit-frame-pointer");
         }
         cmd.arg(&clang_src);
         cmd.arg("-o");
-        cmd.arg(&clang_s);
+        cmd.arg(&clang_rel);
         match run_cmd_timeout(&mut cmd, COMPILE_TIMEOUT) {
             Err(e) => {
                 remove_tmp_dir(&tmp_dir);
@@ -149,18 +148,6 @@ fn run_single(
                 return TestResult::fatal(tag, format!("Clang compile: {err}"));
             }
             _ => {}
-        }
-
-        let status = Command::new(assembler)
-            .args(["-g", "-o"])
-            .arg(&clang_rel)
-            .arg(&clang_s)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-        if !status.is_ok_and(|s| s.success()) {
-            remove_tmp_dir(&tmp_dir);
-            return TestResult::fatal(tag, "Clang assemble failed");
         }
     }
 

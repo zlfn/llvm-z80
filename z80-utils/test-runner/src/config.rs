@@ -16,6 +16,13 @@ impl Target {
         }
     }
 
+    pub fn sdcc_triple(&self) -> &'static str {
+        match self {
+            Target::Z80 => "z80-unknown-none-sdcc",
+            Target::SM83 => "sm83-nintendo-none-sdcc",
+        }
+    }
+
     pub fn reg_name(&self) -> &'static str {
         match self {
             Target::Z80 => "DE",
@@ -155,10 +162,6 @@ impl Paths {
 
     pub fn llc(&self) -> PathBuf {
         self.build_dir.join("bin/llc")
-    }
-
-    pub fn objcopy(&self) -> PathBuf {
-        self.build_dir.join("bin/llvm-objcopy")
     }
 
     pub fn clang_test_dir(&self) -> PathBuf {

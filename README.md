@@ -2,7 +2,7 @@
 
 
 LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.  
-[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Tests / Utilities]](https://github.com/zlfn/llvm-z80/tree/main/z80-utils/test-runner) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ) | [[Prebuilt Binaries]](https://github.com/zlfn/llvm-z80/releases) | [[AUTHORS]](https://github.com/zlfn/llvm-z80/blob/main/AUTHORS) | [[NOTICE]](https://github.com/zlfn/llvm-z80/blob/main/NOTICE)
+[[Backend Code]](https://github.com/llvm-z80/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Tests / Utilities]](https://github.com/llvm-z80/llvm-z80/tree/main/z80-utils) | [[Wiki]](https://github.com/llvm-z80/llvm-z80/wiki) | [[FAQ]](https://github.com/llvm-z80/llvm-z80/wiki/FAQ) | [[Prebuilt Binaries]](https://github.com/llvm-z80/llvm-z80/releases) | [[AUTHORS]](https://github.com/llvm-z80/llvm-z80/blob/main/AUTHORS) | [[NOTICE]](https://github.com/llvm-z80/llvm-z80/blob/main/NOTICE)
 
 ## Notice
 
@@ -52,13 +52,13 @@ Emulation Tested : Z80, SM83
 On Linux and MacOS:
 
 ```bash
-git clone https://github.com/zlfn/llvm-z80.git
+git clone https://github.com/llvm-z80/llvm-z80.git
 ```
 
 On Windows:
 
 ```bash
-git clone --config core.autocrlf=false https://github.com/zlfn/llvm-z80.git
+git clone --config core.autocrlf=false https://github.com/llvm-z80/llvm-z80.git
 ```
 
 If you fail to use the --config flag as above, then verification tests will fail

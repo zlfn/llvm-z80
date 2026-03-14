@@ -9,8 +9,8 @@ Utilities and test infrastructure for LLVM-Z80. This workspace contains three cr
 ## Prerequisites
 * Rust toolchain
 * Built LLVM-Z80 (`ninja -C build` from the repository root)
-* SDCC toolchain (`sdcc`, `sdasz80`, `sdldz80`, `sdasgb`, `sdldgb`)
-* z88dk Z80 emulator (`z88dk-ticks`, `makebin`)
+* SDCC toolchain (`sdcc`, `sdasz80`, `sdldz80`, `sdasgb`, `sdldgb`, `makebin`)
+* z88dk Z80 emulator (`z88dk-ticks`)
 
 ## elf2rel / rel2elf — Object Format Converters
 
@@ -68,7 +68,7 @@ Dynamic test runner for LLVM-Z80. Compiles C and LLVM IR test programs, runs the
 ```bash
 cd z80-utils
 cargo run                        # Run all test suites (default: O1, O2, Os)
-cargo run -full                  # Run all optimization levels (O0-Oz)
+cargo run -- -full                  # Run all optimization levels (O0-Oz)
 ```
 
 ### Test Suites

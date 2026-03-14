@@ -1,8 +1,8 @@
 <img width="2560" height="1280" alt="LLVM-Z80" src="https://github.com/user-attachments/assets/0425ae08-9ecb-4270-840d-90145678df09" />
 
 
-LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.
-[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Test Suites]](https://github.com/zlfn/llvm-z80/tree/main/z80-utils/test-runner) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ) | [[Prebuilt Binaries]](https://github.com/zlfn/llvm-z80/releases) | [[AUTHORS]](https://github.com/zlfn/llvm-z80/blob/main/AUTHORS) | [[NOTICE]](https://github.com/zlfn/llvm-z80/blob/main/NOTICE)
+LLVM-Z80 is a LLVM fork supporting the Zilog Z80 series of microprocessors.  
+[[Backend Code]](https://github.com/zlfn/llvm-z80/tree/main/llvm/lib/Target/Z80) | [[Tests / Utilities]](https://github.com/zlfn/llvm-z80/tree/main/z80-utils/test-runner) | [[Wiki]](https://github.com/zlfn/llvm-z80/wiki) | [[FAQ]](https://github.com/zlfn/llvm-z80/wiki/FAQ) | [[Prebuilt Binaries]](https://github.com/zlfn/llvm-z80/releases) | [[AUTHORS]](https://github.com/zlfn/llvm-z80/blob/main/AUTHORS) | [[NOTICE]](https://github.com/zlfn/llvm-z80/blob/main/NOTICE)
 
 ## Notice
 
@@ -91,6 +91,8 @@ z88dk-ticks -trace output.bin
 Uses sdasz80 assembler and sdldz80 linker. Produces Intel HEX (.ihx) files.
 Useful for cross-linking with SDCC-compiled code.
 
+For more information on SDCC integration, refer [LLVM-Z80 wiki](https://github.com/llvm-z80/llvm-z80/wiki/SDCC-Interoperability)
+
 ```bash
 # Compile C to Intel HEX (via sdasz80 + sdldz80)
 clang --target=z80-unknown-none-sdcc -O1 input.c -o output.ihx
@@ -128,7 +130,7 @@ clang --target=z80 input.s -o output.elf
 clang --target=z80 -O1 -S -emit-llvm input.c -o input.ll
 llc -mtriple=z80 -O1 -z80-asm-format=sdasz80 input.ll -o input.s
 sdasz80 -g -o input.rel input.s
-sdldz80 -i output input.rel build/lib/z80/z80_rt.lib
+sdldz80 -i output.ihx input.rel build/lib/z80/z80_rt.lib
 ```
 
 Runtime libraries are built at `build/lib/z80/` and `build/lib/sm83/`.

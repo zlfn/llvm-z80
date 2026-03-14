@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=z80 -O0 < %s | FileCheck %s --check-prefix=CHECK-O0
-; RUN: llc -mtriple=z80 -O1 < %s | FileCheck %s --check-prefix=CHECK-O1
+; RUN: llc -mtriple=z80 -z80-asm-format=sdasz80 -O0 < %s | FileCheck %s --check-prefix=CHECK-O0
+; RUN: llc -mtriple=z80 -z80-asm-format=sdasz80 -O1 < %s | FileCheck %s --check-prefix=CHECK-O1
 
 ; Fibonacci function - tests register allocation with spills.
 ; At -O0 the ADD result must be correctly spilled when HL is reused
@@ -15,7 +15,7 @@ define i16 @fib(i16 %n) {
 ; CHECK-O0:       jp z,
 
 ; CHECK-O1-LABEL: _fib:
-; CHECK-O1:       add hl,bc
+; CHECK-O1:       add hl,de
   %cmp = icmp sgt i16 %n, 0
   br i1 %cmp, label %loop, label %exit
 

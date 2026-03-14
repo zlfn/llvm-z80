@@ -22,11 +22,11 @@
 namespace llvm {
 
 cl::opt<Z80AsmFormatTy> Z80AsmFormat(
-    "z80-asm-format", cl::init(Z80AsmFormat_SDASZ80),
-    cl::desc("Z80 assembly output format"),
+    "z80-asm-format",
+    cl::desc("Override Z80 assembly output format (default: auto from triple)"),
     cl::values(clEnumValN(Z80AsmFormat_ELF, "elf", "ELF/GNU style"),
                clEnumValN(Z80AsmFormat_SDASZ80, "sdasz80",
-                          "SDCC sdasz80 compatible (default)")));
+                          "SDCC sdasz80 compatible")));
 
 static const MCAsmInfo::AtSpecifier AtSpecifiers[] = {
     {Z80MCExpr::VK_IMM8, "z80_imm8"},

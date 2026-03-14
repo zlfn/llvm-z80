@@ -1,9 +1,8 @@
-; RUN: llc -mtriple=z80 -O1 < %s | FileCheck %s
+; RUN: llc -mtriple=z80 -z80-asm-format=sdasz80 -O1 < %s | FileCheck %s
 
 ; Test: i64 return uses sret (return value stored via pointer in HL)
 define i64 @identity64(i64 %x) {
 ; CHECK-LABEL: _identity64:
-; CHECK:       push ix
 ; CHECK:       ret
   ret i64 %x
 }
@@ -11,10 +10,10 @@ define i64 @identity64(i64 %x) {
 ; Test: i64 addition (narrowed to 4 x i16 add/adc chain)
 define i64 @add64(i64 %a, i64 %b) {
 ; CHECK-LABEL: _add64:
-; CHECK:       add hl,{{bc|de}}
-; CHECK:       adc hl,{{bc|de}}
-; CHECK:       adc hl,{{bc|de}}
-; CHECK:       adc hl,{{bc|de}}
+; CHECK:       add hl,de
+; CHECK:       adc hl,de
+; CHECK:       adc hl,de
+; CHECK:       adc hl,de
 ; CHECK:       ret
   %r = add i64 %a, %b
   ret i64 %r

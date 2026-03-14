@@ -1,13 +1,13 @@
-; RUN: llc -mtriple=z80 -O1 < %s | FileCheck %s
-; RUN: llc -mtriple=sm83 -O1 < %s | FileCheck %s
+; RUN: llc -mtriple=z80 -z80-asm-format=sdasz80 -O1 < %s | FileCheck %s
+; RUN: llc -mtriple=sm83 -z80-asm-format=sdasz80 -O1 < %s | FileCheck %s
 
 ; Test G_BLOCK_ADDR: computed goto (GCC &&label extension)
 ; Block addresses should be materialized as LD rr,#label
 
 define i8 @computed_goto(i8 %op) {
 ; CHECK-LABEL: _computed_goto:
-; CHECK:       ld {{[a-z]+}},#.Ltmp
-; CHECK:       ld {{[a-z]+}},#.Ltmp
+; CHECK:       ld {{[a-z]+}},#{{\.?}}Ltmp
+; CHECK:       ld {{[a-z]+}},#{{\.?}}Ltmp
 ; CHECK:       jp (hl)
 entry:
   %table = alloca [2 x ptr]

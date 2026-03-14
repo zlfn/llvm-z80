@@ -21,7 +21,7 @@ If you require a Z80 C compiler for production purposes, please use [SDCC](https
 **Z80, binary-compatible CPUs, and the SM83 (GBZ80).**
 Z80, Z180, eZ80, Z80N, R800, μPD780, LH0080, SM83 (GBZ80), AP (Analogue Pocket). <sup><a href="#architecture-todo">†1</a></sup>
 
-Physical Hardware Validation: : TODO
+Physical Hardware Validation : TODO  
 Emulation Tested : Z80, SM83
 
 ## Feature
@@ -37,7 +37,7 @@ Emulation Tested : Z80, SM83
 
 ## Frontend Integration
 * **C/C++** : Supported via Clang included in this repository (C++ is experimental and untested)
-* **Rust** : Ongoing
+* **Rust** : [llvm-z80/rust-z80](https://github.com/llvm-z80/rust-z80)
 * **Others** : Potential support for other LLVM-based languages (Zig, TinyGo, EmbeddedSwift)
 
 # Building LLVM-Z80
